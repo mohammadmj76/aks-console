@@ -1,0 +1,65 @@
+/* ============================================================
+   Ar UIKit tokens — names follow the uikit MCP catalog
+   (bg/fg/st × semantic × tier × state). Hex values are the
+   Arvan console palette (teal primary) used across the product.
+   ============================================================ */
+:root {
+  /* bg */
+  --bg-neutral-t3-0-default: #f5f6f8;  /* page canvas        */
+  --bg-neutral-t1-1-default: #ffffff;  /* card surface       */
+  --bg-neutral-t1-4-default: #f0f2f5;  /* subtle fill        */
+  --bg-neutral-t1-4-hover:   #e8ebef;
+  --bg-primary-t1-1-default: #00b5ad;
+  --bg-primary-t1-1-hover:   #00a19a;
+  --bg-primary-t1-1-active:  #008b85;
+  --bg-primary-t3-1-default: #e2f6f5;  /* primary tint       */
+  --bg-success-t1-1-default: #12a150;
+  --bg-success-t3-1-default: #e5f5ec;
+  --bg-error-t1-1-default:   #e5484d;
+  --bg-error-t3-1-default:   #fdeced;
+  --bg-warning-t1-1-default: #eda01c;
+  --bg-warning-t3-1-default: #fdf3e0;
+  --bg-info-t1-1-default:    #0d99d6;
+  --bg-info-t3-1-default:    #e5f6fc;
+  --bg-fresh-green-t1-1-default: #0da06a;
+  --bg-fresh-green-t3-1-default: #e4f7f0;
+  --bg-violet-t3-1-default:  #efeafe;
+  --bg-orange-t3-1-default:  #fdeee3;
+  --bg-magenta-t3-1-default: #fceaf6;
+
+  /* fg */
+  --fg-neutral-t1-1-default: #171b21;
+  --fg-neutral-t1-2-default: #4c545f;
+  --fg-neutral-t1-3-default: #7b8390;
+  --fg-neutral-t2-1-default: #ffffff;  /* on colored fills   */
+  --fg-primary-t1-1-default: #007d78;
+  --fg-success-t1-1-default: #0d7c3e;
+  --fg-error-t1-1-default:   #cd2f34;
+  --fg-warning-t1-1-default: #9c6708;
+  --fg-info-t1-1-default:    #0874a4;
+  --fg-fresh-green-t1-1-default: #0a7a4f;
+  --fg-violet-t1-1-default:  #6b46e5;
+  --fg-orange-t1-1-default:  #d3560e;
+  --fg-magenta-t1-1-default: #b63487;
+
+  /* st (strokes) */
+  --st-neutral-t1-1-default: #e6e8ec;  /* hairlines          */
+  --st-neutral-t1-2-default: #d3d7de;  /* control borders    */
+  --st-neutral-t1-5-default: #97a0ac;
+  --st-primary-t1-1-default: #00b5ad;
+
+  /* radius */
+  --radius-sm: 4px;  --radius-md: 8px;  --radius-lg: 12px;  --radius-circular: 9999px;
+
+  /* spacing */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+
+  /* shadows */
+  --shadow-xs: 0 1px 2px rgba(16,24,40,.06);
+  --shadow-sm: 0 4px 8px -2px rgba(16,24,40,.08);
+  --shadow-md: 0 12px 16px -4px rgba(16,24,40,.10);
+
+  /* typography */
+  --font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+}

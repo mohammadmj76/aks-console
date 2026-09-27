@@ -1,0 +1,71 @@
+# Arvan AKS Console — Kubernetes UI concept
+
+A front-end design prototype for **Arvan Kubernetes Service (AKS)** — a managed
+Kubernetes console built with the Ar design system (the same token system as
+Arvan's UIKit), implemented with **Vue 3 + Vite + Vue Router**.
+
+The prototype covers AKS **Phase 1 + Phase 2** scope only:
+
+- Cluster list with quotas, filters, and bulk selection
+- 3-step **Create cluster** wizard (cluster & control plane → network & node
+  pool → review & create) with a live order-summary rail and cost estimate
+- Cluster details with **Overview / Node pools / Networking / Operations** tabs
+- Node pool lifecycle: add pool, scale ±, autoscaling (min/max), delete
+- User-initiated Kubernetes version upgrades
+- Phase-2 operations: Prometheus metrics endpoint, etcd control-plane backups,
+  audit logs
+- Kubeconfig download, provisioning/upgrade simulations, toasts, empty states
+
+Out of scope (later phases, intentionally not designed here): addons
+marketplace, private API endpoint (VPN gateway), multi-region, GPU flavors,
+shared control planes, managed Velero, unified IAM.
+
+## Getting started
+
+```bash
+npm install
+npm run dev      # http://localhost:5175
+```
+
+## Production build
+
+```bash
+npm run build    # outputs dist/
+npm run preview  # serve the build locally
+```
+
+## Deploy on Vercel
+
+1. Push this repository to GitHub.
+2. In Vercel: **Add New → Project** and import the repo.
+3. Vercel auto-detects Vite (build `npm run build`, output `dist`). The
+   included `vercel.json` rewrites all routes to `index.html` so the Vue
+   Router history-mode deep links work.
+
+## Design system
+
+All colors, spacing, radii and typography live in
+[`src/styles/tokens.css`](src/styles/tokens.css) using the Ar token naming
+(`bg/fg/st × semantic × tier × state`). The primary palette is Arvan teal.
+Component classes (`.ar-btn`, `.ar-card`, `.ar-table`, …) live in
+`src/styles/components.css`; page layout and the console shell are in
+`src/styles/shell.css`.
+
+## Project structure
+
+```
+src/
+├── App.vue                  # console shell (sidebar + top bar + router view)
+├── router.js                # /clusters, /clusters/create, /clusters/:id
+├── store.js                 # reactive mock store + simulations (provision/upgrade)
+├── data.js                  # catalog: region, versions, flavors, VPCs, pricing
+├── styles/                  # tokens, base, component classes, shell
+├── components/              # shell + Ar UI primitives
+└── views/
+    ├── ClusterList.vue      # cluster inventory
+    ├── ClusterCreate.vue    # 3-step wizard + summary rail
+    └── ClusterDetails.vue   # overview / pools / networking / operations
+```
+
+> **Note:** all data is mocked client-side (no backend). Pricing numbers are
+> placeholders for the demo only.
