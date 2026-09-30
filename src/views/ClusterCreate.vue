@@ -307,6 +307,7 @@ function create() {
                 </div>
                 <div class="p-price">Price: {{ fmtIRR(p.pricePerDay) }} IRR/Day</div>
               </div>
+
             </div>
           </div>
 
