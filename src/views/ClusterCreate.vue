@@ -288,26 +288,21 @@ function create() {
             <button :class="{ on: typeView === 'table' }" @click="typeView = 'table'">Table</button>
           </div>
 
-          <div v-if="typeView === 'card'" class="plan-grid">
+          <div v-if="typeView === 'card'" class="type-rows">
             <div
               v-for="p in CP_PLANS"
               :key="p.id"
-              class="ar-card selectable plan type-card"
+              class="ar-card selectable type-row"
               :class="{ selected: draft.cp.plan === p.id }"
               @click="selectType(p)"
             >
               <span class="radio"></span>
-              <div class="p-body">
-                <div class="p-name">{{ p.name }}</div>
-                <div class="p-spec">
-                  <span class="k">CPU</span><span>{{ p.vcpu }} vCPU</span>
-                  <span class="k">Memory</span><span>{{ p.ram }} GB</span>
-                  <span class="k">Max Nodes</span><span>{{ p.maxNodes }}</span>
-                  <span class="k">Max etcd Size</span><span>{{ p.etcdSize }}</span>
-                </div>
-                <div class="p-price">Price: {{ fmtIRR(p.pricePerDay) }} IRR/Day</div>
-              </div>
-
+              <div class="t-name">{{ p.name }}</div>
+              <div class="t-spec"><span class="ts-k">CPU</span><span class="ts-v">{{ p.vcpu }} vCPU</span></div>
+              <div class="t-spec"><span class="ts-k">Memory</span><span class="ts-v">{{ p.ram }} GB</span></div>
+              <div class="t-spec"><span class="ts-k">Max Nodes</span><span class="ts-v">{{ p.maxNodes }}</span></div>
+              <div class="t-spec"><span class="ts-k">Max etcd Size</span><span class="ts-v">{{ p.etcdSize }}</span></div>
+              <div class="t-spec t-price"><span class="ts-k">Price</span><span class="ts-v">{{ fmtIRR(p.pricePerDay) }} IRR/Day</span></div>
             </div>
           </div>
 
