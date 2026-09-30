@@ -1,8 +1,8 @@
 /* ============================================================
    Mock catalog + seed data — scoped to AKS Phase 1 + 2.
    Phase 3/4 items (addons marketplace, private API, multi-region,
-   GPU flavors, managed Velero, unified IAM) are intentionally
-   absent — see AKS release plan / descope.
+   GPU flavors, autoscaling, managed Velero, unified IAM) are
+   intentionally absent — see AKS release plan / descope.
    ============================================================ */
 
 export const REGION = {
@@ -10,7 +10,7 @@ export const REGION = {
   name: 'Iran Central',
   location: 'Tehran',
   zones: [
-    { id: 'foroogh', name: 'Foroogh' },
+    { id: 'foroogh', name: 'Forough' },
     { id: 'bamdad', name: 'Bamdad' },
     { id: 'simin', name: 'Simin' },
   ],
@@ -18,16 +18,16 @@ export const REGION = {
 
 /* Regions shown on the create page — only Iran Central is live */
 export const REGIONS = [
-  { ...REGION, flag: 'ir', enabled: true },
-  { id: 'ir-nw-1', name: 'Iran NorthWest', location: 'Tabriz', zones: [], flag: 'ir', enabled: false },
-  { id: 'eu-west-1', name: 'Europe West', location: 'Paris', zones: [], flag: 'fr', enabled: false },
-  { id: 'ir-sw-1', name: 'Iran Southwest', location: 'Ahvaz', zones: [], flag: 'ir', enabled: false, badge: 'New' },
+  { id: 'ir-central-1', name: 'Iran Central', zones: ['Bamdad', 'Forough', 'Simin'], flag: 'ir', enabled: true },
+  { id: 'ir-nw-1', name: 'Iran NorthWest', zones: ['Shahriar'], flag: 'ir', enabled: false },
+  { id: 'eu-west-1', name: 'Europe West', zones: ['Goethe'], flag: 'de', enabled: false },
+  { id: 'ir-sw-1', name: 'Iran Southwest', zones: ['Qeysar'], flag: 'ir', enabled: false, badge: 'New' },
 ]
 
 export const VERSIONS = [
   { id: '1.36', patch: '1.36.3', default: true },
   { id: '1.35', patch: '1.35.4' },
-  { id: '1.34', patch: '1.34.8', deprecation: 'Support ends Mar 2027' },
+  { id: '1.34', patch: '1.34.8' },
 ]
 
 /* Cluster types — dedicated control-plane specs (price in IRR/day) */
@@ -39,18 +39,44 @@ export const CP_PLANS = [
   { id: 'xlarge',  name: 'XLarge', vcpu: 16, ram: 64, maxNodes: 1000, pricePerDay: 28_800_000 },
 ]
 
-/* Worker flavors (price in IRR/month per node) */
-export const FLAVORS = [
-  { id: 'g4-2-4',   name: 'Basic',       vcpu: 2,  ram: 4,  price: 21_000_000,  helper: 'Cost-optimized for light workloads.' },
-  { id: 'g4-4-8',   name: 'Standard',    vcpu: 4,  ram: 8,  price: 42_000_000,  helper: 'Balanced configuration for running general workloads.' },
-  { id: 'g4-8-16',  name: 'Performance', vcpu: 8,  ram: 16, price: 84_000_000,  helper: 'Compute-optimized for demanding workloads.' },
-  { id: 'g4-16-32', name: 'Memory',      vcpu: 16, ram: 32, price: 168_000_000, helper: 'Memory-optimized for data-heavy services.' },
+/* ---------- flavor catalog (worker nodes) ---------- */
+const AZS = () => [
+  { id: 'foroogh', name: 'Forough', soldOut: false },
+  { id: 'bamdad', name: 'Bamdad', soldOut: false },
+  { id: 'simin', name: 'Simin', soldOut: false },
+]
+const azs = (soldOut = []) =>
+  AZS().map((z) => (soldOut.includes(z.id) ? { ...z, soldOut: true } : z))
+
+export const FLAVOR_CATALOG = [
+  // General computing-plus
+  { id: 'g6.large.2',    category: 'General computing-plus', vcpu: 2,  ram: 4,  azs: azs(),                   bandwidth: '0.8 / 4.0 Gbit/s',   pps: '400,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 16,  pricePerHour: 68_685 },
+  { id: 'g6.large.4',    category: 'General computing-plus', vcpu: 2,  ram: 8,  azs: azs(),                   bandwidth: '0.8 / 4.0 Gbit/s',   pps: '400,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 16,  pricePerHour: 93_669 },
+  { id: 'g6.xlarge.2',   category: 'General computing-plus', vcpu: 4,  ram: 8,  azs: azs(),                   bandwidth: '1.6 / 8.0 Gbit/s',   pps: '800,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 32,  pricePerHour: 137_370 },
+  { id: 'g6.xlarge.4',   category: 'General computing-plus', vcpu: 4,  ram: 16, azs: azs(['bamdad', 'simin']), bandwidth: '1.6 / 8.0 Gbit/s',  pps: '800,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 32,  pricePerHour: 187_338 },
+  { id: 'g6.2xlarge.2',  category: 'General computing-plus', vcpu: 8,  ram: 16, azs: azs(),                   bandwidth: '3.0 / 15.0 Gbit/s',  pps: '1,500,000', cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 64,  pricePerHour: 274_740 },
+  { id: 'g6.2xlarge.4',  category: 'General computing-plus', vcpu: 8,  ram: 32, azs: azs(['foroogh', 'bamdad']), bandwidth: '3.0 / 15.0 Gbit/s', pps: '1,500,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 64,  pricePerHour: 374_676 },
+  { id: 'g6.3xlarge.2',  category: 'General computing-plus', vcpu: 12, ram: 24, azs: azs(),                   bandwidth: '5.0 / 17.0 Gbit/s',  pps: '2,000,000', cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 96,  pricePerHour: 412_110 },
+  { id: 'g6.3xlarge.4',  category: 'General computing-plus', vcpu: 12, ram: 48, azs: azs(['foroogh', 'bamdad']), bandwidth: '5.0 / 17.0 Gbit/s', pps: '2,000,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 96,  pricePerHour: 562_014 },
+  { id: 'g6.4xlarge.2',  category: 'General computing-plus', vcpu: 16, ram: 32, azs: azs(),                   bandwidth: '6.0 / 20.0 Gbit/s',  pps: '2,500,000', cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 128, pricePerHour: 549_480 },
+  // General computing
+  { id: 's6.large.2',    category: 'General computing', vcpu: 2,  ram: 4,  azs: azs(),                        bandwidth: '0.5 / 2.0 Gbit/s',  pps: '200,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 16,  pricePerHour: 52_000 },
+  { id: 's6.large.4',    category: 'General computing', vcpu: 2,  ram: 8,  azs: azs(),                        bandwidth: '0.5 / 2.0 Gbit/s',  pps: '200,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 16,  pricePerHour: 78_000 },
+  { id: 's6.xlarge.2',   category: 'General computing', vcpu: 4,  ram: 8,  azs: azs(['simin']),               bandwidth: '1.0 / 4.0 Gbit/s',  pps: '400,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 32,  pricePerHour: 104_000 },
+  { id: 's6.2xlarge.2',  category: 'General computing', vcpu: 8,  ram: 16, azs: azs(),                        bandwidth: '2.0 / 8.0 Gbit/s',  pps: '800,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 64,  pricePerHour: 208_000 },
+  // Memory-optimized
+  { id: 'm6.large.4',    category: 'Memory-optimized', vcpu: 2,  ram: 8,  azs: azs(),                          bandwidth: '0.8 / 4.0 Gbit/s',  pps: '300,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 16,  pricePerHour: 96_000 },
+  { id: 'm6.xlarge.4',   category: 'Memory-optimized', vcpu: 4,  ram: 16, azs: azs(['bamdad']),                bandwidth: '1.6 / 8.0 Gbit/s',  pps: '600,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 32,  pricePerHour: 192_000 },
+  { id: 'm6.2xlarge.4',  category: 'Memory-optimized', vcpu: 8,  ram: 32, azs: azs(),                          bandwidth: '3.0 / 15.0 Gbit/s', pps: '1,200,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 64,  pricePerHour: 384_000 },
 ]
 
-export const flavorName = (id) => FLAVORS.find((f) => f.id === id)?.name || id
+export const FLAVOR_CATEGORIES = ['General computing-plus', 'General computing', 'Memory-optimized']
+
+export const flavor = (id) => FLAVOR_CATALOG.find((f) => f.id === id)
+export const flavorName = (id) => flavor(id)?.name || id
 export const flavorSpec = (id) => {
-  const f = FLAVORS.find((f) => f.id === id)
-  return f ? `${f.vcpu} vCPU · ${f.ram} GB RAM` : id
+  const f = flavor(id)
+  return f ? `${f.vcpu} vCPU / ${f.ram} GB` : id
 }
 
 export const VOLUME_PRICE_PER_GB = 90_000 // ssd-g1, IRR / GB / month
@@ -79,8 +105,6 @@ export const VPCS = [
 
 export const FIREWALL_GROUPS = ['Default', 'Internal Traffic', 'Web Traffic', 'SSH Restricted']
 
-export const CIDR_PREFIXES = ['8', '12', '16', '17', '18', '20', '22', '24', '26', '28']
-
 /* Day-1 platform components — bundled, not user-manageable addons
    (addons management ships in a later phase) */
 export const INCLUDED_COMPONENTS = [
@@ -104,7 +128,6 @@ export const SEED_CLUSTERS = [
     version: '1.36.3',
     region: 'ir-central-1',
     cp: { plan: 'medium', ha: true },
-    clusterSize: 50,
     vpcId: 'vpc-prod',
     subnetIds: ['sn-prod-foroogh', 'sn-prod-bamdad', 'sn-prod-simin'],
     podCidr: '192.168.0.0/16',
@@ -119,21 +142,19 @@ export const SEED_CLUSTERS = [
       {
         id: 'pool-8fa2',
         name: 'api-pool',
-        flavor: 'g4-4-8',
         count: 3,
+        specs: [{ flavorId: 'g6.xlarge.2', zones: ['foroogh', 'bamdad', 'simin'] }],
         zones: ['foroogh', 'bamdad', 'simin'],
         subnets: ['sn-prod-foroogh', 'sn-prod-bamdad', 'sn-prod-simin'],
-        autoscale: { enabled: true, min: 3, max: 6 },
         volumeGb: 50,
       },
       {
         id: 'pool-3c19',
         name: 'worker-pool',
-        flavor: 'g4-8-16',
         count: 4,
+        specs: [{ flavorId: 'g6.2xlarge.2', zones: ['foroogh', 'bamdad'] }],
         zones: ['foroogh', 'bamdad'],
         subnets: ['sn-prod-foroogh', 'sn-prod-bamdad'],
-        autoscale: { enabled: false, min: 4, max: 4 },
         volumeGb: 100,
       },
     ],
@@ -149,7 +170,6 @@ export const SEED_CLUSTERS = [
     version: '1.35.4',
     region: 'ir-central-1',
     cp: { plan: 'xsmall', ha: true },
-    clusterSize: 50,
     vpcId: 'vpc-staging',
     subnetIds: ['sn-stg-foroogh'],
     podCidr: '10.200.0.0/16',
@@ -164,11 +184,10 @@ export const SEED_CLUSTERS = [
       {
         id: 'pool-b7e4',
         name: 'default-pool',
-        flavor: 'g4-2-4',
         count: 2,
+        specs: [{ flavorId: 'g6.large.2', zones: ['foroogh'] }],
         zones: ['foroogh'],
         subnets: ['sn-stg-foroogh'],
-        autoscale: { enabled: false, min: 2, max: 2 },
         volumeGb: 50,
       },
     ],
@@ -183,7 +202,6 @@ export const SEED_CLUSTERS = [
     version: '1.35.4',
     region: 'ir-central-1',
     cp: { plan: 'small', ha: true },
-    clusterSize: 100,
     vpcId: 'vpc-prod',
     subnetIds: ['sn-prod-simin'],
     podCidr: '10.202.0.0/16',
@@ -198,11 +216,10 @@ export const SEED_CLUSTERS = [
       {
         id: 'pool-52ab',
         name: 'batch-pool',
-        flavor: 'g4-8-16',
         count: 3,
+        specs: [{ flavorId: 'g6.2xlarge.2', zones: ['simin'] }],
         zones: ['simin'],
         subnets: ['sn-prod-simin'],
-        autoscale: { enabled: false, min: 3, max: 3 },
         volumeGb: 100,
       },
     ],
@@ -216,7 +233,7 @@ export const SEED_EVENTS = {
     { ts: '10:40:51', type: 'Normal', reason: 'NodeReady', msg: 'Node api-pool-7f2a1 became ready' },
     { ts: '09:58:13', type: 'Warning', reason: 'BackOff', msg: 'Back-off restarting failed container checkout in pod checkout-5d8f7b6c9-p4kzt' },
     { ts: '02:00:04', type: 'Normal', reason: 'EtcdBackupSucceeded', msg: 'Control-plane backup uploaded (14 restore points retained)' },
-    { ts: '01:12:38', type: 'Normal', reason: 'ScaleDown', msg: 'Cluster autoscaler removed node api-pool-9d3c5 (underutilized)' },
+    { ts: '01:12:38', type: 'Normal', reason: 'ScaleDown', msg: 'Node api-pool-9d3c5 removed after scale-in' },
   ],
   'aks-staging77': [
     { ts: '11:03:22', type: 'Normal', reason: 'UpgradeStarted', msg: 'Control-plane upgrade 1.35.4 → 1.36.3 started (KCP rolling replacement)' },
@@ -238,15 +255,16 @@ export function apiEndpoint(cluster) {
 /* ---------- pricing (IRR) ---------- */
 export const fmtIRR = (n) => n.toLocaleString('en-US')
 
-export function monthlyPrice({ cp, pools }) {
+export function monthlyPrice({ cp, pool }) {
   const cpPlan = CP_PLANS.find((p) => p.id === cp.plan)
   const cpCost = (cpPlan?.pricePerDay || 0) * 30
   let nodesCost = 0
   let volumeCost = 0
-  for (const p of pools) {
-    const f = FLAVORS.find((f) => f.id === p.flavor)
-    nodesCost += (f?.price || 0) * p.count
-    volumeCost += VOLUME_PRICE_PER_GB * (p.volumeGb || 50) * p.count
+  if (pool && pool.specs?.length) {
+    const count = pool.count || 1
+    const avgHour = pool.specs.reduce((s, sp) => s + (flavor(sp.flavorId)?.pricePerHour || 0), 0) / pool.specs.length
+    nodesCost = Math.round(avgHour * 730) * count
+    volumeCost = VOLUME_PRICE_PER_GB * (pool.volumeGb || 50) * count
   }
   const total = cpCost + nodesCost + volumeCost
   return {
@@ -260,6 +278,3 @@ export function monthlyPrice({ cp, pools }) {
 
 export const fmtDate = (iso) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-
-/* Backwards-compat alias */
-export const fmtToman = fmtIRR

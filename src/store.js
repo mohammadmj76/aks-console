@@ -35,6 +35,19 @@ export const store = reactive({
     for (const v of VPCS_SAFE) for (const s of v.subnets) zoneOf[s.id] = s.zone
     const zones = [...new Set(draft.subnetIds.map((id) => zoneOf[id]).filter(Boolean))]
 
+    const poolDraft = draft.pool
+    const pools = poolDraft?.specs?.length
+      ? [{
+          id: 'pool-' + nextId(),
+          name: poolDraft.name || 'node-pool-1',
+          count: poolDraft.count || 1,
+          specs: poolDraft.specs.map((s) => ({ flavorId: s.flavorId, zones: [...s.zones] })),
+          zones,
+          subnets: [...draft.subnetIds],
+          volumeGb: 50,
+        }]
+      : []
+
     const cluster = {
       id: 'aks-' + draft.name.replace(/[^a-z0-9]/g, '').slice(0, 10) + nextId(),
       name: draft.name,
@@ -46,7 +59,6 @@ export const store = reactive({
       version: ver.patch,
       region: draft.regionId || 'ir-central-1',
       cp: { plan: draft.cp.plan, ha: draft.cp.ha ?? true },
-      clusterSize: draft.clusterSize || 50,
       vpcId: draft.vpcId,
       subnetIds: [...draft.subnetIds],
       podCidr: draft.podCidr,
@@ -57,20 +69,16 @@ export const store = reactive({
       etcdBackup: { enabled: true, lastRun: '—', restorePoints: 0 },
       monitoring: { enabled: draft.monitoring ?? true, endpoint: draft.monitoring === false ? '' : `https://metrics.${API_HOST}/v1/${draft.name}/prometheus` },
       auditLogs: draft.auditLogs ?? false,
-      pools: draft.pools.map((p) => ({
-        ...p,
-        id: 'pool-' + nextId(),
-        zones,
-        subnets: [...draft.subnetIds],
-        volumeGb: 50,
-        autoscale: { ...p.autoscale },
-      })),
+      pools,
       usage: { cpu: 0, mem: 0, pods: 0 },
     }
     this.clusters.unshift(cluster)
     this.events[cluster.id] = [
       { ts: timeNow(), type: 'Normal', reason: 'ClusterCreateStarted', msg: `Provisioning dedicated control plane (${cpPlanName(cluster)})` },
     ]
+    if (pools.length) {
+      this.events[cluster.id].push({ ts: timeNow(), type: 'Normal', reason: 'NodePoolCreated', msg: `Node pool ${pools[0].name} created (${pools[0].count} nodes)` })
+    }
     this.simulateProvisioning(cluster)
     return cluster
   },
@@ -119,17 +127,14 @@ export const store = reactive({
   },
 
   addPool(cluster, pool) {
-    cluster.pools.push({ ...pool, id: 'pool-' + nextId(), autoscale: { ...pool.autoscale } })
-    this.events[cluster.id].unshift({ ts: timeNow(), type: 'Normal', reason: 'NodePoolCreated', msg: `Node pool ${pool.name} created (${pool.count} × ${pool.flavor})` })
+    cluster.pools.push({ ...pool, id: 'pool-' + nextId() })
+    this.events[cluster.id].unshift({ ts: timeNow(), type: 'Normal', reason: 'NodePoolCreated', msg: `Node pool ${pool.name} created (${pool.count} nodes)` })
     this.toast('success', 'Node pool created', `${pool.name} is joining ${cluster.name}.`)
   },
 
   scalePool(cluster, pool, delta) {
     const next = pool.count + delta
-    const { min, max, enabled } = pool.autoscale
-    const lo = enabled ? min : 1
-    const hi = enabled ? Math.max(max, pool.count) : 20
-    if (next < lo || next > hi) return
+    if (next < 1 || next > 20) return
     pool.count = next
     this.events[cluster.id].unshift({
       ts: timeNow(), type: 'Normal',

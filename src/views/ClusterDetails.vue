@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store, downloadKubeconfig, newerVersionAvailable } from '../store'
-import { REGION, VERSIONS, CP_PLANS, FLAVORS, VPCS, apiEndpoint, fmtDate, flavorName, flavorSpec } from '../data'
+import { REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, VPCS, apiEndpoint, fmtDate, flavorName, flavorSpec } from '../data'
 import ArButton from '../components/ui/ArButton.vue'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
@@ -56,11 +56,14 @@ watch(cluster, reseed)
 import { watch } from 'vue'
 
 /* per-node mock rows */
+function poolFlavorIds(pool) {
+  return pool.specs?.length ? pool.specs.map((s) => s.flavorId) : [pool.flavor].filter(Boolean)
+}
 function nodesOf(pool) {
-  const f = FLAVORS.find((f) => f.id === pool.flavor)
+  const flavors = poolFlavorIds(pool)
   return Array.from({ length: pool.count }, (_, i) => ({
     name: `${pool.name}-${(pool.id + i * 7919).toString(36).slice(0, 5)}`,
-    flavor: pool.flavor,
+    flavor: flavors[i % flavors.length],
     zone: pool.zones.length ? pool.zones[i % pool.zones.length] : REGION.zones[i % REGION.zones.length].id,
     ip: `172.31.${(parseInt(pool.id.slice(-1), 36) % 9) + 1}.${10 + i}`,
     cpu: Math.round((cluster.value?.usage.cpu || 10) * (0.7 + ((i * 37) % 60) / 100)),
@@ -71,18 +74,21 @@ const expandedPools = reactive({})
 
 /* add pool panel */
 const showAddPool = ref(false)
-const poolForm = reactive({ name: '', flavor: 'g4-4-8', count: 2, zones: ['foroogh'], volumeGb: 50, autoscale: { enabled: false, min: 2, max: 4 } })
-const poolFormOk = computed(() => /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(poolForm.name) && poolForm.count >= 1 && (!poolForm.autoscale.enabled || poolForm.autoscale.max >= poolForm.autoscale.min))
+const poolForm = reactive({ name: '', flavor: 'g6.xlarge.2', count: 2 })
+const poolFormOk = computed(() => /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(poolForm.name) && poolForm.count >= 1)
 function submitPool() {
   if (!poolFormOk.value || !cluster.value) return
-  const subnets = (vpc.value?.subnets || []).filter((s) => poolForm.zones.includes(s.zone)).map((s) => s.id)
-  store.addPool(cluster.value, { ...poolForm, subnets: subnets.length ? subnets : [vpc.value?.subnets[0]?.id].filter(Boolean) })
+  const zones = cluster.value.subnetIds.map((id) => vpc.value?.subnets.find((s) => s.id === id)?.zone).filter(Boolean)
+  store.addPool(cluster.value, {
+    name: poolForm.name,
+    count: poolForm.count,
+    specs: [{ flavorId: poolForm.flavor, zones: zones.length ? zones : REGION.zones.map((z) => z.id) }],
+    zones: zones.length ? zones : REGION.zones.map((z) => z.id),
+    subnets: [...cluster.value.subnetIds],
+    volumeGb: 50,
+  })
   showAddPool.value = false
   poolForm.name = ''
-}
-function toggleZone(z) {
-  const i = poolForm.zones.indexOf(z)
-  i >= 0 ? poolForm.zones.splice(i, 1) : poolForm.zones.push(z)
 }
 
 /* delete cluster */
@@ -286,26 +292,23 @@ function menuAction(item) {
           <div style="flex: 1; min-width: 0">
             <div class="text-body-1">{{ pool.name }}</div>
             <div class="cell-sub" style="margin-top: 2px">
-              {{ flavorName(pool.flavor) }} ({{ pool.flavor }} · {{ flavorSpec(pool.flavor) }}) · {{ pool.count }} node{{ pool.count === 1 ? '' : 's' }} · ssd-g1 {{ pool.volumeGb }} GB
+              {{ poolFlavorIds(pool).map((id) => flavorName(id)).join(', ') }} ·
+              {{ pool.count }} node{{ pool.count === 1 ? '' : 's' }} · ssd-g1 {{ pool.volumeGb }} GB
               · {{ pool.zones.length ? pool.zones.map((z) => REGION.zones.find((zz) => zz.id === z)?.name).join(', ') : 'all zones' }}
             </div>
           </div>
-          <span v-if="pool.autoscale.enabled" class="ar-badge primary pill">autoscale {{ pool.autoscale.min }}–{{ pool.autoscale.max }}</span>
           <div style="display: flex; align-items: center; gap: var(--space-2)">
             <div class="count-input" style="height: 30px">
-              <button class="sm" style="width: 28px" :disabled="cluster.status !== 'running' || pool.count <= (pool.autoscale.enabled ? pool.autoscale.min : 1)" @click="store.scalePool(cluster, pool, -1)">−</button>
+              <button class="sm" style="width: 28px" :disabled="cluster.status !== 'running' || pool.count <= 1" @click="store.scalePool(cluster, pool, -1)">−</button>
               <input :value="pool.count" readonly style="width: 40px; font-size: 13px" />
-              <button class="sm" style="width: 28px" :disabled="cluster.status !== 'running' || pool.count >= (pool.autoscale.enabled ? Math.max(pool.autoscale.max, pool.count) : 20)" @click="store.scalePool(cluster, pool, 1)">+</button>
+              <button class="sm" style="width: 28px" :disabled="cluster.status !== 'running' || pool.count >= 20" @click="store.scalePool(cluster, pool, 1)">+</button>
             </div>
             <ActionMenu
               :items="[
-                { label: pool.autoscale.enabled ? 'Disable autoscaling' : 'Enable autoscaling', action: 'autoscale' },
-                { sep: true },
                 { label: 'Delete pool', danger: true, disabled: cluster.pools.length <= 1, action: 'delete' },
               ]"
               @select="(i) => {
                 if (i.action === 'delete') store.removePool(cluster, pool)
-                if (i.action === 'autoscale') { pool.autoscale.enabled = !pool.autoscale.enabled; store.toast('info', 'Autoscaling ' + (pool.autoscale.enabled ? 'enabled' : 'disabled'), pool.name) }
               }"
             />
           </div>
@@ -442,7 +445,7 @@ function menuAction(item) {
     <ArSidePanel :open="showAddPool" title="Add node pool" :subtitle="cluster.name" @close="showAddPool = false">
       <div class="ar-field">
         <label>Pool name<span class="req">*</span></label>
-        <div class="ar-input" :class="{ 'error-mode': poolForm.name && !poolFormOk && !/^[a-z]/.test(poolForm.name) === false && !/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(poolForm.name) }">
+        <div class="ar-input" :class="{ 'error-mode': poolForm.name && !/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(poolForm.name) }">
           <input v-model="poolForm.name" placeholder="e.g. worker-pool" spellcheck="false" style="text-transform: lowercase" />
         </div>
         <span class="hint">Lowercase letters, digits and dashes. 3–40 characters.</span>
@@ -450,22 +453,13 @@ function menuAction(item) {
 
       <div class="ar-field">
         <span class="ar-field-label">Flavor<span class="req">*</span></span>
-        <div class="plan-grid cols-2">
-          <div v-for="f in FLAVORS" :key="f.id" class="ar-card selectable plan" :class="{ selected: poolForm.flavor === f.id }" @click="poolForm.flavor = f.id">
-            <span class="p-check"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m3.5 8.5 3 3 6-7"/></svg></span>
-            <div class="p-name">{{ f.id }}</div>
-            <div class="p-spec">{{ f.vcpu }} vCPU · {{ f.ram }} GB RAM</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="ar-field">
-        <span class="ar-field-label">Availability zones</span>
-        <div class="chip-row">
-          <button v-for="z in REGION.zones" :key="z.id" class="chip" :class="{ on: poolForm.zones.includes(z.id) }" @click="toggleZone(z.id)">
-            <span class="tick"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m3.5 8.5 3 3 6-7"/></svg></span>
-            {{ z.name }}
-          </button>
+        <div class="ar-input">
+          <select v-model="poolForm.flavor">
+            <option v-for="f in FLAVOR_CATALOG" :key="f.id" :value="f.id">
+              {{ f.id }} · {{ f.vcpu }} vCPU / {{ f.ram }} GB · {{ f.category }}
+            </option>
+          </select>
+          <svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
         </div>
       </div>
 
@@ -487,26 +481,6 @@ function menuAction(item) {
               <option :value="200">200 GB</option>
             </select>
             <svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
-          </div>
-        </div>
-      </div>
-
-      <div style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3)">
-        <label style="display: flex; align-items: center; gap: var(--space-3); cursor: pointer">
-          <ArToggle v-model="poolForm.autoscale.enabled" />
-          <span>
-            <span class="text-body-2-strong">Autoscaling</span>
-            <span class="text-caption-1 muted" style="display: block">Scale between min and max on pending pods.</span>
-          </span>
-        </label>
-        <div v-if="poolForm.autoscale.enabled" style="display: flex; gap: var(--space-3)">
-          <div class="ar-field" style="width: 110px">
-            <label>Min nodes</label>
-            <div class="ar-input"><input v-model.number="poolForm.autoscale.min" type="number" min="1" max="20" /></div>
-          </div>
-          <div class="ar-field" style="width: 110px">
-            <label>Max nodes</label>
-            <div class="ar-input"><input v-model.number="poolForm.autoscale.max" type="number" min="1" max="20" /></div>
           </div>
         </div>
       </div>
