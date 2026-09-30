@@ -20,10 +20,8 @@ const draft = reactive({
   labels: [],
   version: VERSIONS.find((v) => v.default).id,
   cp: { plan: 'medium' },
-  accessType: 'single',
   vpcId: '',
   subnetIds: [],
-  securityGroups: ['Default'],
   podCidrs: [{ octets: ['192', '168', '0', '0'], prefix: '16' }],
   svcCidrs: [{ octets: ['10', '10', '0', '0'], prefix: '24' }],
   pool: { name: '', count: 2 },
@@ -80,16 +78,8 @@ function selectType(p) {
   draft.cp.plan = p.id
 }
 function toggleSubnet(id) {
-  if (draft.accessType === 'single') {
-    draft.subnetIds = [id]
-  } else {
-    const i = draft.subnetIds.indexOf(id)
-    i >= 0 ? draft.subnetIds.splice(i, 1) : draft.subnetIds.push(id)
-  }
-}
-function setAccess(t) {
-  draft.accessType = t
-  if (t === 'single' && draft.subnetIds.length > 1) draft.subnetIds = [draft.subnetIds[0]]
+  const i = draft.subnetIds.indexOf(id)
+  i >= 0 ? draft.subnetIds.splice(i, 1) : draft.subnetIds.push(id)
 }
 
 function addCidr(list) {
@@ -358,14 +348,6 @@ function create() {
               </div>
 
               <div class="ar-field">
-                <span class="ar-field-label">Access Type<span class="req">*</span></span>
-                <div class="seg">
-                  <button :class="{ on: draft.accessType === 'single' }" @click="setAccess('single')">Single AZ</button>
-                  <button :class="{ on: draft.accessType === 'multi' }" @click="setAccess('multi')">Multi AZ</button>
-                </div>
-              </div>
-
-              <div class="ar-field">
                 <span class="ar-field-label">Subnet<span class="req">*</span></span>
                 <div class="table-scroll">
                   <table class="ar-table" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md)">
@@ -392,7 +374,7 @@ function create() {
                     </tbody>
                   </table>
                 </div>
-                <span class="hint">{{ draft.accessType === 'single' ? 'Single AZ — pick one subnet.' : 'Multi AZ — pick one subnet per availability zone.' }}</span>
+                <span class="hint">Pick one subnet per availability zone you want worker nodes in.</span>
               </div>
             </div>
           </div>
@@ -763,7 +745,6 @@ function create() {
             <div class="rail-text">
               <p>VPC: {{ vpc ? `${vpc.name} (${vpc.cidr})` : '—' }}</p>
               <p>Subnet: {{ railSubnets || '—' }}</p>
-              <p>Access: {{ draft.accessType === 'single' ? 'Single AZ' : 'Multi AZ' }}</p>
               <p>Pod CIDR: <span class="mono">{{ cidrStr(draft.podCidrs[0]) }}</span></p>
               <p>Service CIDR: <span class="mono">{{ cidrStr(draft.svcCidrs[0]) }}</span></p>
             </div>
