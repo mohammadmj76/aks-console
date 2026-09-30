@@ -68,18 +68,9 @@ export const FLAVOR_CATALOG = [
   // Premium Plus
   { id: 'g6.3xlarge.4',  category: 'Premium Plus', vcpu: 12, ram: 48, azs: azs(['foroogh', 'bamdad']), bandwidth: '5.0 / 17.0 Gbit/s', pps: '2,000,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 96,  pricePerHour: 562_014 },
   { id: 'g6.4xlarge.2',  category: 'Premium Plus', vcpu: 16, ram: 32, azs: azs(),                      bandwidth: '6.0 / 20.0 Gbit/s', pps: '2,500,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 128, pricePerHour: 549_480 },
-  // GPU
-  { id: 'gn6.xlarge.8',  category: 'GPU', vcpu: 8,  ram: 32, azs: azs(['bamdad', 'simin']),           bandwidth: '4.0 / 18.0 Gbit/s', pps: '1,800,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 64,  pricePerHour: 1_240_000 },
-  { id: 'gn6.2xlarge.8', category: 'GPU', vcpu: 12, ram: 48, azs: azs(['bamdad', 'simin']),           bandwidth: '5.0 / 17.0 Gbit/s', pps: '2,000,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 96,  pricePerHour: 2_480_000 },
-  // Spot
-  { id: 'sp6.large.2',   category: 'Spot', vcpu: 2,  ram: 4,  azs: azs(),                          bandwidth: '0.8 / 4.0 Gbit/s',  pps: '400,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 16,  pricePerHour: 21_400 },
-  { id: 'sp6.xlarge.2',  category: 'Spot', vcpu: 4,  ram: 8,  azs: azs(),                          bandwidth: '1.6 / 8.0 Gbit/s',  pps: '800,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 32,  pricePerHour: 42_800 },
-  // Dedicated Server
-  { id: 'd6.xlarge.2',   category: 'Dedicated Server', vcpu: 4,  ram: 8,  azs: azs(),                 bandwidth: '1.6 / 8.0 Gbit/s',  pps: '800,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 32,  pricePerHour: 152_000 },
-  { id: 'd6.2xlarge.2',  category: 'Dedicated Server', vcpu: 8,  ram: 16, azs: azs(['simin']),                bandwidth: '3.0 / 15.0 Gbit/s', pps: '1,500,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 64,  pricePerHour: 288_000 },
 ]
 
-export const FLAVOR_CATEGORIES = ['Basic', 'Standard', 'Premium', 'Premium Plus', 'GPU', 'Spot', 'Dedicated Server']
+export const FLAVOR_CATEGORIES = ['Basic', 'Standard', 'Premium', 'Premium Plus']
 
 export const flavor = (id) => FLAVOR_CATALOG.find((f) => f.id === id)
 export const flavorName = (id) => flavor(id)?.name || id
