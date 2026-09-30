@@ -1,10 +1,10 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { store } from '../store'
 import {
   REGIONS, REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, FLAVOR_CATEGORIES,
-  VPCS, FIREWALL_GROUPS, INCLUDED_COMPONENTS, monthlyPrice, fmtIRR,
+  VPCS, INCLUDED_COMPONENTS, monthlyPrice, fmtIRR,
 } from '../data'
 import ArButton from '../components/ui/ArButton.vue'
 import ArCheckbox from '../components/ui/ArCheckbox.vue'
@@ -38,12 +38,11 @@ const cpPlan = computed(() => CP_PLANS.find((p) => p.id === draft.cp.plan))
 
 const nameOk = computed(() => /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(draft.name))
 const subnetOk = computed(() => draft.subnetIds.length > 0)
-const sgOk = computed(() => draft.securityGroups.length > 0)
 const cidrsOk = computed(() => isValidCidrs(draft.podCidrs) && isValidCidrs(draft.svcCidrs))
 const poolNameOk = computed(() => !draft.pool.name || /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(draft.pool.name))
 const specsOk = computed(() => draft.specs.every((s) => s.zones.length > 0))
 const canCreate = computed(
-  () => nameOk.value && subnetOk.value && sgOk.value && cidrsOk.value && poolNameOk.value && specsOk.value
+  () => nameOk.value && subnetOk.value && cidrsOk.value && poolNameOk.value && specsOk.value
 )
 
 const price = computed(() =>
@@ -104,19 +103,6 @@ function octetInput(e, row, i) {
   const v = e.target.value.replace(/[^\d]/g, '').slice(0, 3)
   row.octets[i] = v
   e.target.value = v
-}
-
-/* security-group dropdown */
-const sgOpen = ref(false)
-const sgRoot = ref(null)
-function onDocClick(e) {
-  if (sgRoot.value && !sgRoot.value.contains(e.target)) sgOpen.value = false
-}
-onMounted(() => document.addEventListener('click', onDocClick))
-onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
-function toggleSg(name) {
-  const i = draft.securityGroups.indexOf(name)
-  i >= 0 ? draft.securityGroups.splice(i, 1) : draft.securityGroups.push(name)
 }
 
 /* labels */
@@ -408,31 +394,6 @@ function create() {
                 </div>
                 <span class="hint">{{ draft.accessType === 'single' ? 'Single AZ — pick one subnet.' : 'Multi AZ — pick one subnet per availability zone.' }}</span>
               </div>
-
-              <div class="ar-field" style="max-width: 520px; position: relative" ref="sgRoot">
-                <span class="ar-field-label">Node Security Group Firewall<span class="req">*</span></span>
-                <div class="tagbox" :class="{ open: sgOpen }" @click="sgOpen = !sgOpen">
-                  <template v-if="draft.securityGroups.length">
-                    <span v-for="g in draft.securityGroups" :key="g" class="ar-tag">
-                      {{ g }}
-                      <button class="tag-x" aria-label="Remove" @click.stop="toggleSg(g)">
-                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
-                      </button>
-                    </span>
-                  </template>
-                  <span v-else class="placeholder">Select firewall groups…</span>
-                  <svg class="chev" style="margin-left:auto" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
-                </div>
-                <div v-if="sgOpen" class="tag-dropdown">
-                  <label v-for="g in FIREWALL_GROUPS" :key="g">
-                    <span class="ar-checkbox">
-                      <input type="checkbox" :checked="draft.securityGroups.includes(g)" @change="toggleSg(g)" />
-                      <span class="box"><svg class="check" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m3.5 8.5 3 3 6-7"/></svg></span>
-                    </span>
-                    {{ g }}
-                  </label>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -445,18 +406,26 @@ function create() {
             <div v-if="net.container" style="display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-6)">
               <div v-for="(row, i) in draft.podCidrs" :key="i" class="cidr-row">
                 <span class="cidr-idx">{{ i + 1 }}</span>
-                <div class="cidr-octets" :class="{ invalid: row.octets.some((o, j) => (j === 0 ? false : o === '' || +o > 255)) }">
-                  <select v-model="row.octets[0]" aria-label="First octet">
-                    <option v-for="o in ['10', '172', '192']" :key="o" :value="o">{{ o }}</option>
-                  </select>
-                  <template v-for="(o, j) in row.octets" :key="j">
-                    <span v-if="j > 0" class="dot-sep" :class="{ first: j === 1 }">.</span>
-                    <input v-if="j > 0" :value="o" inputmode="numeric" @input="octetInput($event, row, j)" aria-label="Octet" />
-                  </template>
+                <div class="cidr-octets">
+                  <span class="oct-box sel">
+                    <select v-model="row.octets[0]" aria-label="First octet">
+                      <option v-for="o in ['10', '172', '192']" :key="o" :value="o">{{ o }}</option>
+                    </select>
+                    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
+                  </span>
+                  <span class="dot-sep">.</span>
+                  <span class="oct-box"><input :value="row.octets[1]" inputmode="numeric" @input="octetInput($event, row, 1)" aria-label="Octet 2" /></span>
+                  <span class="dot-sep">.</span>
+                  <span class="oct-box"><input :value="row.octets[2]" inputmode="numeric" @input="octetInput($event, row, 2)" aria-label="Octet 3" /></span>
+                  <span class="dot-sep">.</span>
+                  <span class="oct-box"><input :value="row.octets[3]" inputmode="numeric" @input="octetInput($event, row, 3)" aria-label="Octet 4" /></span>
                   <span class="slash">/</span>
-                  <select v-model="row.prefix" aria-label="Prefix">
-                    <option v-for="p in ['8','12','16','17','18','20','22','24','26','28']" :key="p" :value="p">{{ p }}</option>
-                  </select>
+                  <span class="oct-box sel">
+                    <select v-model="row.prefix" aria-label="Prefix">
+                      <option v-for="p in ['8','12','16','17','18','20','22','24','26','28']" :key="p" :value="p">{{ p }}</option>
+                    </select>
+                    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
+                  </span>
                 </div>
                 <button class="cidr-btn" :disabled="draft.podCidrs.length <= 1" @click="removeCidr(draft.podCidrs, i)" aria-label="Remove CIDR">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 4h10M5.5 4V3h5v1M4.5 4l.7 9h5.6l.7-9"/></svg>
@@ -485,18 +454,26 @@ function create() {
             <div v-if="net.service" style="display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-6)">
               <div v-for="(row, i) in draft.svcCidrs" :key="i" class="cidr-row">
                 <span class="cidr-idx">{{ i + 1 }}</span>
-                <div class="cidr-octets" :class="{ invalid: row.octets.some((o, j) => (j === 0 ? false : o === '' || +o > 255)) }">
-                  <select v-model="row.octets[0]" aria-label="First octet">
-                    <option v-for="o in ['10', '172', '192']" :key="o" :value="o">{{ o }}</option>
-                  </select>
-                  <template v-for="(o, j) in row.octets" :key="j">
-                    <span v-if="j > 0" class="dot-sep" :class="{ first: j === 1 }">.</span>
-                    <input v-if="j > 0" :value="o" inputmode="numeric" @input="octetInput($event, row, j)" aria-label="Octet" />
-                  </template>
+                <div class="cidr-octets">
+                  <span class="oct-box sel">
+                    <select v-model="row.octets[0]" aria-label="First octet">
+                      <option v-for="o in ['10', '172', '192']" :key="o" :value="o">{{ o }}</option>
+                    </select>
+                    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
+                  </span>
+                  <span class="dot-sep">.</span>
+                  <span class="oct-box"><input :value="row.octets[1]" inputmode="numeric" @input="octetInput($event, row, 1)" aria-label="Octet 2" /></span>
+                  <span class="dot-sep">.</span>
+                  <span class="oct-box"><input :value="row.octets[2]" inputmode="numeric" @input="octetInput($event, row, 2)" aria-label="Octet 3" /></span>
+                  <span class="dot-sep">.</span>
+                  <span class="oct-box"><input :value="row.octets[3]" inputmode="numeric" @input="octetInput($event, row, 3)" aria-label="Octet 4" /></span>
                   <span class="slash">/</span>
-                  <select v-model="row.prefix" aria-label="Prefix">
-                    <option v-for="p in ['8','12','16','17','18','20','22','24','26','28']" :key="p" :value="p">{{ p }}</option>
-                  </select>
+                  <span class="oct-box sel">
+                    <select v-model="row.prefix" aria-label="Prefix">
+                      <option v-for="p in ['8','12','16','17','18','20','22','24','26','28']" :key="p" :value="p">{{ p }}</option>
+                    </select>
+                    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
+                  </span>
                 </div>
                 <button class="cidr-btn" :disabled="draft.svcCidrs.length <= 1" @click="removeCidr(draft.svcCidrs, i)" aria-label="Remove CIDR">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 4h10M5.5 4V3h5v1M4.5 4l.7 9h5.6l.7-9"/></svg>
@@ -789,7 +766,6 @@ function create() {
               <p>Access: {{ draft.accessType === 'single' ? 'Single AZ' : 'Multi AZ' }}</p>
               <p>Pod CIDR: <span class="mono">{{ cidrStr(draft.podCidrs[0]) }}</span></p>
               <p>Service CIDR: <span class="mono">{{ cidrStr(draft.svcCidrs[0]) }}</span></p>
-              <p>Firewall: {{ draft.securityGroups.join(', ') || '—' }}</p>
             </div>
           </div>
 

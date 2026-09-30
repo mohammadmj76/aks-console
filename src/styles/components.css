@@ -443,23 +443,36 @@ table.ar-table { width: 100%; border-collapse: collapse; }
 .collapse-head.closed .chev { transform: rotate(-90deg); }
 .collapse-head .req { color: var(--fg-primary-t1-1-default); }
 
-/* ---------- CIDR editor ---------- */
+/* ---------- CIDR editor (loose boxed octets, selects with chevrons) ---------- */
 .cidr-row { display: flex; align-items: center; gap: var(--space-2); }
 .cidr-idx {
   width: 24px; height: 24px; border-radius: var(--radius-sm); flex: none;
   background: var(--bg-neutral-t1-4-default); color: var(--fg-neutral-t1-2-default);
   font-size: 12px; font-weight: 450; display: flex; align-items: center; justify-content: center;
 }
-.cidr-octets { display: flex; align-items: center; border: 1px solid var(--st-neutral-t1-2-default); border-radius: var(--radius-md); height: 38px; padding: 0 2px; }
-.cidr-octets:focus-within { border-color: var(--st-primary-t1-1-default); box-shadow: 0 0 0 3px var(--bg-primary-t3-1-default); }
-.cidr-octets input {
-  width: 44px; height: 100%; border: 0; outline: 0; text-align: center;
-  font: inherit; font-size: 14px; color: var(--fg-neutral-t1-1-default);
+.cidr-octets { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.oct-box {
+  position: relative; display: inline-flex; align-items: center;
+  width: 60px; height: 38px;
+  border: 1px solid var(--st-neutral-t1-2-default); border-radius: var(--radius-md);
+  background: var(--bg-neutral-t1-1-default);
+  transition: border-color .15s, box-shadow .15s;
 }
-.cidr-octets .dot-sep { color: var(--fg-neutral-t1-3-default); }
-.cidr-octets .slash { color: var(--fg-neutral-t1-3-default); padding: 0 2px; }
-.cidr-octets select { border: 0; outline: 0; background: none; font: inherit; font-size: 14px; cursor: pointer; height: 100%; }
-.cidr-octets.invalid { border-color: var(--bg-error-t1-1-default); }
+.oct-box:focus-within, .oct-box:focus-within select { border-color: var(--st-primary-t1-1-default); }
+.oct-box:focus-within { box-shadow: 0 0 0 3px var(--bg-primary-t3-1-default); }
+.oct-box input {
+  width: 100%; height: 100%; border: 0; outline: 0; text-align: center;
+  font: inherit; font-size: 14px; color: var(--fg-neutral-t1-1-default);
+  border-radius: var(--radius-md); background: transparent;
+}
+.oct-box select {
+  width: 100%; height: 100%; appearance: none; border: 0; outline: 0;
+  background: transparent; font: inherit; font-size: 14px; color: var(--fg-neutral-t1-1-default);
+  padding: 0 24px 0 12px; cursor: pointer; border-radius: var(--radius-md);
+}
+.oct-box .chev { position: absolute; right: 9px; pointer-events: none; color: var(--fg-neutral-t1-3-default); }
+.oct-box.sel { width: 72px; }
+.cidr-octets .dot-sep, .cidr-octets .slash { color: var(--fg-neutral-t1-3-default); font-size: 14px; }
 .cidr-btn {
   width: 34px; height: 34px; border-radius: var(--radius-md); border: 1px solid var(--st-neutral-t1-2-default);
   background: var(--bg-neutral-t1-1-default); color: var(--fg-neutral-t1-2-default); cursor: pointer;
