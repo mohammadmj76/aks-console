@@ -27,8 +27,6 @@ const draft = reactive({
   pool: { name: '', count: 2 },
   specs: [], // [{ flavorId, zones: [] }]
 })
-const net = reactive({ cluster: true, container: true, service: true })
-
 /* ---------------- computed ---------------- */
 const region = computed(() => REGIONS.find((r) => r.id === regionId.value))
 const vpc = computed(() => VPCS.find((v) => v.id === draft.vpcId))
@@ -325,11 +323,10 @@ function create() {
 
           <!-- Cluster Network -->
           <div class="net-block">
-            <div class="collapse-head" :class="{ closed: !net.cluster }" style="padding: var(--space-4) 0" @click="net.cluster = !net.cluster">
-              <svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
+            <div class="collapse-head static" style="padding: var(--space-4) 0">
               <span class="text-body-1">Cluster Network<span class="req">*</span></span>
             </div>
-            <div v-if="net.cluster" style="display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-6)">
+            <div style="display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-6)">
               <div class="ar-field" style="max-width: 520px">
                 <label>VPC<span class="req">*</span></label>
                 <div class="ar-input">
@@ -377,11 +374,10 @@ function create() {
 
           <!-- Container Network -->
           <div class="net-block">
-            <div class="collapse-head" :class="{ closed: !net.container }" style="padding: var(--space-4) 0" @click="net.container = !net.container">
-              <svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
+            <div class="collapse-head static" style="padding: var(--space-4) 0">
               <span class="text-body-1">Container Network<span class="req">*</span></span>
             </div>
-            <div v-if="net.container" style="display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-6)">
+            <div style="display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-6)">
               <div v-for="(row, i) in draft.podCidrs" :key="i" class="cidr-row">
                 <span class="cidr-idx">{{ i + 1 }}</span>
                 <div class="cidr-octets">
@@ -425,11 +421,10 @@ function create() {
 
           <!-- Service Network -->
           <div class="net-block" style="border-bottom: 0">
-            <div class="collapse-head" :class="{ closed: !net.service }" style="padding: var(--space-4) 0" @click="net.service = !net.service">
-              <svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
+            <div class="collapse-head static" style="padding: var(--space-4) 0">
               <span class="text-body-1">Service Network<span class="req">*</span></span>
             </div>
-            <div v-if="net.service" style="display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-6)">
+            <div style="display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-6)">
               <div v-for="(row, i) in draft.svcCidrs" :key="i" class="cidr-row">
                 <span class="cidr-idx">{{ i + 1 }}</span>
                 <div class="cidr-octets">
