@@ -68,7 +68,7 @@ function menuAction(c, item) {
     <div class="page-header">
       <div>
         <div class="title-row">
-          <h1 class="text-title-2" style="margin: 0">Kubernetes clusters</h1>
+          <h1 class="text-title-2" style="margin: 0">Kubernetes Cluster</h1>
           <span class="ar-badge beta pill">Beta</span>
           <span class="ar-badge neutral pill">{{ REGION.name }}</span>
         </div>
@@ -82,7 +82,7 @@ function menuAction(c, item) {
       </div>
       <router-link to="/clusters/create" class="ar-btn primary" style="text-decoration: none">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
-        Create cluster
+        Create Kubernetes Cluster
       </router-link>
     </div>
 
@@ -162,9 +162,9 @@ function menuAction(c, item) {
             </td>
             <td class="text-body-2">{{ c.version }}</td>
             <td class="text-body-2">
-              {{ { 'cp-small': 'Small', 'cp-medium': 'Medium', 'cp-large': 'Large' }[c.cp.plan] }}
+              {{ { xsmall: 'xSmall', small: 'Small', medium: 'Medium', large: 'Large', xlarge: 'XLarge' }[c.cp.plan] }}
               <span class="muted">·</span>
-              {{ c.cp.ha ? 'HA ×3' : 'Single' }}
+              {{ c.cp.ha ? 'HA' : 'Single' }}
             </td>
             <td class="text-body-2">{{ c.pools.reduce((n, p) => n + p.count, 0) }}</td>
             <td class="text-body-2 muted">{{ fmtDate(c.createdAt) }}</td>
@@ -186,7 +186,7 @@ function menuAction(c, item) {
 
     <div v-else class="ar-card">
       <ArEmpty title="No clusters match" desc="Try clearing the filters, or create your first cluster to get started.">
-        <router-link to="/clusters/create" class="ar-btn primary sm" style="text-decoration: none">Create cluster</router-link>
+        <router-link to="/clusters/create" class="ar-btn primary sm" style="text-decoration: none">Create Kubernetes Cluster</router-link>
       </ArEmpty>
     </div>
 

@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { SEED_CLUSTERS, SEED_EVENTS, API_HOST, apiEndpoint, VERSIONS, CP_PLANS, FLAVORS, QUOTA } from './data'
+import { SEED_CLUSTERS, SEED_EVENTS, API_HOST, apiEndpoint, VERSIONS, CP_PLANS } from './data'
 
 let uid = 100
 const nextId = () => String(++uid)
@@ -8,7 +8,7 @@ export const store = reactive({
   clusters: [...SEED_CLUSTERS],
   events: { ...SEED_EVENTS },
   toasts: [],
-  clusterQuota: QUOTA.clusters,
+  clusterQuota: 5,
 
   toast(type, title, msg, ttl = 4500) {
     const id = nextId()
@@ -28,33 +28,48 @@ export const store = reactive({
     return this.clusters.find((c) => c.id === id)
   },
 
+  /* draft comes from the single-page create form */
   createCluster(draft) {
     const ver = VERSIONS.find((v) => v.id === draft.version)
+    const zoneOf = {}
+    for (const v of VPCS_SAFE) for (const s of v.subnets) zoneOf[s.id] = s.zone
+    const zones = [...new Set(draft.subnetIds.map((id) => zoneOf[id]).filter(Boolean))]
+
     const cluster = {
       id: 'aks-' + draft.name.replace(/[^a-z0-9]/g, '').slice(0, 10) + nextId(),
       name: draft.name,
-      description: draft.description,
+      description: draft.description || '',
+      labels: draft.labels || [],
       status: 'provisioning',
       progress: 5,
       progressLabel: 'Allocating control plane',
       version: ver.patch,
-      region: 'ir-central-1',
-      cp: { ...draft.cp },
+      region: draft.regionId || 'ir-central-1',
+      cp: { plan: draft.cp.plan, ha: draft.cp.ha ?? true },
+      clusterSize: draft.clusterSize || 50,
       vpcId: draft.vpcId,
       subnetIds: [...draft.subnetIds],
       podCidr: draft.podCidr,
       svcCidr: draft.svcCidr,
+      securityGroups: [...(draft.securityGroups || ['Default'])],
       apiAccess: 'public',
       createdAt: new Date().toISOString(),
       etcdBackup: { enabled: true, lastRun: '—', restorePoints: 0 },
-      monitoring: { enabled: draft.monitoring, endpoint: draft.monitoring ? `https://metrics.${API_HOST}/v1/${draft.name}/prometheus` : '' },
-      auditLogs: draft.auditLogs,
-      pools: [{ ...draft.pool, id: 'pool-' + nextId(), autoscale: { ...draft.pool.autoscale } }],
+      monitoring: { enabled: draft.monitoring ?? true, endpoint: draft.monitoring === false ? '' : `https://metrics.${API_HOST}/v1/${draft.name}/prometheus` },
+      auditLogs: draft.auditLogs ?? false,
+      pools: draft.pools.map((p) => ({
+        ...p,
+        id: 'pool-' + nextId(),
+        zones,
+        subnets: [...draft.subnetIds],
+        volumeGb: 50,
+        autoscale: { ...p.autoscale },
+      })),
       usage: { cpu: 0, mem: 0, pods: 0 },
     }
     this.clusters.unshift(cluster)
     this.events[cluster.id] = [
-      { ts: timeNow(), type: 'Normal', reason: 'ClusterCreateStarted', msg: `Provisioning dedicated control plane (${cpPlanName(cluster)}${cluster.cp.ha ? ', 3-node HA' : ''})` },
+      { ts: timeNow(), type: 'Normal', reason: 'ClusterCreateStarted', msg: `Provisioning dedicated control plane (${cpPlanName(cluster)})` },
     ]
     this.simulateProvisioning(cluster)
     return cluster
@@ -136,6 +151,8 @@ export const store = reactive({
   },
 })
 
+import { VPCS as VPCS_SAFE } from './data'
+
 function timeNow() {
   return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
@@ -177,5 +194,3 @@ export function newerVersionAvailable(cluster) {
   const latest = VERSIONS[0].patch
   return cluster.status === 'running' && cluster.version !== latest
 }
-
-export { FLAVORS }

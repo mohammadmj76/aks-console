@@ -7,7 +7,7 @@
 
 export const REGION = {
   id: 'ir-central-1',
-  name: 'Iran Central 1',
+  name: 'Iran Central',
   location: 'Tehran',
   zones: [
     { id: 'foroogh', name: 'Foroogh' },
@@ -16,53 +16,70 @@ export const REGION = {
   ],
 }
 
+/* Regions shown on the create page — only Iran Central is live */
+export const REGIONS = [
+  { ...REGION, flag: 'ir', enabled: true },
+  { id: 'ir-nw-1', name: 'Iran NorthWest', location: 'Tabriz', zones: [], flag: 'ir', enabled: false },
+  { id: 'eu-west-1', name: 'Europe West', location: 'Paris', zones: [], flag: 'fr', enabled: false },
+  { id: 'ir-sw-1', name: 'Iran Southwest', location: 'Ahvaz', zones: [], flag: 'ir', enabled: false, badge: 'New' },
+]
+
 export const VERSIONS = [
-  { id: '1.30', patch: '1.30.5', default: true },
-  { id: '1.29', patch: '1.29.8' },
-  { id: '1.28', patch: '1.28.7', deprecation: 'Support ends Mar 2027' },
+  { id: '1.36', patch: '1.36.3', default: true },
+  { id: '1.35', patch: '1.35.4' },
+  { id: '1.34', patch: '1.34.8', deprecation: 'Support ends Mar 2027' },
 ]
 
-/* Dedicated control plane — v1 model (one spec per cluster) */
+/* Cluster types — dedicated control-plane specs (price in IRR/day) */
 export const CP_PLANS = [
-  { id: 'cp-small',  name: 'Small',  vcpu: 2, ram: 4,  maxNodes: 10,  price: 9_500_000 },
-  { id: 'cp-medium', name: 'Medium', vcpu: 4, ram: 8,  maxNodes: 50,  price: 19_000_000 },
-  { id: 'cp-large',  name: 'Large',  vcpu: 8, ram: 16, maxNodes: 100, price: 38_000_000 },
+  { id: 'xsmall',  name: 'xSmall', vcpu: 2,  ram: 8,  maxNodes: 50,   pricePerDay: 1_800_000 },
+  { id: 'small',   name: 'Small',  vcpu: 4,  ram: 16, maxNodes: 100,  pricePerDay: 3_600_000 },
+  { id: 'medium',  name: 'Medium', vcpu: 4,  ram: 32, maxNodes: 250,  pricePerDay: 7_200_000 },
+  { id: 'large',   name: 'Large',  vcpu: 8,  ram: 32, maxNodes: 500,  pricePerDay: 14_400_000 },
+  { id: 'xlarge',  name: 'XLarge', vcpu: 16, ram: 64, maxNodes: 1000, pricePerDay: 28_800_000 },
 ]
 
-/* General-purpose g* flavors only in Phase 1 (GPU is out of scope) */
+/* Worker flavors (price in IRR/month per node) */
 export const FLAVORS = [
-  { id: 'g4-2-4',   vcpu: 2,  ram: 4,   price: 4_200_000 },
-  { id: 'g4-4-8',   vcpu: 4,  ram: 8,   price: 8_400_000 },
-  { id: 'g4-8-16',  vcpu: 8,  ram: 16,  price: 16_800_000 },
-  { id: 'g4-16-32', vcpu: 16, ram: 32,  price: 33_600_000 },
+  { id: 'g4-2-4',   name: 'Basic',       vcpu: 2,  ram: 4,  price: 21_000_000,  helper: 'Cost-optimized for light workloads.' },
+  { id: 'g4-4-8',   name: 'Standard',    vcpu: 4,  ram: 8,  price: 42_000_000,  helper: 'Balanced configuration for running general workloads.' },
+  { id: 'g4-8-16',  name: 'Performance', vcpu: 8,  ram: 16, price: 84_000_000,  helper: 'Compute-optimized for demanding workloads.' },
+  { id: 'g4-16-32', name: 'Memory',      vcpu: 16, ram: 32, price: 168_000_000, helper: 'Memory-optimized for data-heavy services.' },
 ]
 
-export const VOLUME_PRICE_PER_GB = 9_000 // ssd-g1, Toman / GB / month
+export const flavorName = (id) => FLAVORS.find((f) => f.id === id)?.name || id
+export const flavorSpec = (id) => {
+  const f = FLAVORS.find((f) => f.id === id)
+  return f ? `${f.vcpu} vCPU · ${f.ram} GB RAM` : id
+}
+
+export const VOLUME_PRICE_PER_GB = 90_000 // ssd-g1, IRR / GB / month
 
 export const VPCS = [
   {
     id: 'vpc-prod',
-    name: 'vpc-prod',
-    cidr: '172.31.0.0/16',
+    name: 'VPC-Name',
+    cidr: '192.168.0.0/16',
     subnets: [
-      { id: 'sn-prod-foroogh', name: 'sn-prod-foroogh', cidr: '172.31.1.0/24', zone: 'foroogh' },
-      { id: 'sn-prod-bamdad', name: 'sn-prod-bamdad', cidr: '172.31.2.0/24', zone: 'bamdad' },
-      { id: 'sn-prod-simin', name: 'sn-prod-simin', cidr: '172.31.3.0/24', zone: 'simin' },
+      { id: 'sn-prod-foroogh', name: 'Subnet Name', cidr: '192.168.1.1/24', zone: 'foroogh' },
+      { id: 'sn-prod-bamdad', name: 'Subnet Name 2', cidr: '192.168.2.0/24', zone: 'bamdad' },
+      { id: 'sn-prod-simin', name: 'Subnet Name 3', cidr: '192.168.3.0/24', zone: 'simin' },
     ],
   },
   {
     id: 'vpc-staging',
-    name: 'vpc-staging',
+    name: 'VPC-Staging',
     cidr: '10.10.0.0/16',
     subnets: [
-      { id: 'sn-stg-foroogh', name: 'sn-stg-foroogh', cidr: '10.10.1.0/24', zone: 'foroogh' },
-      { id: 'sn-stg-bamdad', name: 'sn-stg-bamdad', cidr: '10.10.2.0/24', zone: 'bamdad' },
+      { id: 'sn-stg-foroogh', name: 'Staging Subnet 1', cidr: '10.10.1.0/24', zone: 'foroogh' },
+      { id: 'sn-stg-bamdad', name: 'Staging Subnet 2', cidr: '10.10.2.0/24', zone: 'bamdad' },
     ],
   },
 ]
 
-export const POD_CIDRS = ['10.200.0.0/16', '10.201.0.0/16', '10.202.0.0/16']
-export const SVC_CIDRS = ['10.96.0.0/16', '10.97.0.0/16', '10.98.0.0/16']
+export const FIREWALL_GROUPS = ['Default', 'Internal Traffic', 'Web Traffic', 'SSH Restricted']
+
+export const CIDR_PREFIXES = ['8', '12', '16', '17', '18', '20', '22', '24', '26', '28']
 
 /* Day-1 platform components — bundled, not user-manageable addons
    (addons management ships in a later phase) */
@@ -74,7 +91,7 @@ export const INCLUDED_COMPONENTS = [
   { name: 'Cloud Controller (ACCM)', version: '1.0', note: 'Zones, provider IDs, LB sync' },
 ]
 
-export const QUOTA = { clusters: 5, nodes: 60 } // per region, Phase 1 defaults
+export const QUOTA = { clusters: 5, nodes: 250 } // per region, Phase 1 defaults
 
 /* ---------- seed clusters ---------- */
 export const SEED_CLUSTERS = [
@@ -82,14 +99,17 @@ export const SEED_CLUSTERS = [
     id: 'aks-prodplatform01',
     name: 'prod-platform',
     description: 'Customer-facing API and web workloads',
+    labels: ['prod', 'customer-facing'],
     status: 'running',
-    version: '1.30.5',
+    version: '1.36.3',
     region: 'ir-central-1',
-    cp: { plan: 'cp-large', ha: true },
+    cp: { plan: 'medium', ha: true },
+    clusterSize: 50,
     vpcId: 'vpc-prod',
     subnetIds: ['sn-prod-foroogh', 'sn-prod-bamdad', 'sn-prod-simin'],
-    podCidr: '10.200.0.0/16',
-    svcCidr: '10.96.0.0/16',
+    podCidr: '192.168.0.0/16',
+    svcCidr: '10.10.0.0/24',
+    securityGroups: ['Default', 'Internal Traffic'],
     apiAccess: 'public',
     createdAt: '2026-09-12T09:20:00Z',
     etcdBackup: { enabled: true, lastRun: 'Today 02:00', restorePoints: 14 },
@@ -123,15 +143,18 @@ export const SEED_CLUSTERS = [
     id: 'aks-staging77',
     name: 'staging',
     description: 'Pre-production environment',
+    labels: ['staging'],
     status: 'upgrading',
-    upgrade: { from: '1.29.8', to: '1.30.5' },
-    version: '1.29.8',
+    upgrade: { from: '1.35.4', to: '1.36.3' },
+    version: '1.35.4',
     region: 'ir-central-1',
-    cp: { plan: 'cp-small', ha: false },
+    cp: { plan: 'xsmall', ha: true },
+    clusterSize: 50,
     vpcId: 'vpc-staging',
     subnetIds: ['sn-stg-foroogh'],
-    podCidr: '10.201.0.0/16',
-    svcCidr: '10.97.0.0/16',
+    podCidr: '10.200.0.0/16',
+    svcCidr: '10.96.0.0/24',
+    securityGroups: ['Default'],
     apiAccess: 'public',
     createdAt: '2026-09-15T14:05:00Z',
     etcdBackup: { enabled: true, lastRun: 'Today 02:00', restorePoints: 3 },
@@ -155,14 +178,17 @@ export const SEED_CLUSTERS = [
     id: 'aks-mlbatch03',
     name: 'ml-batch',
     description: 'Batch training and nightly jobs',
+    labels: ['batch'],
     status: 'running',
-    version: '1.29.8',
+    version: '1.35.4',
     region: 'ir-central-1',
-    cp: { plan: 'cp-medium', ha: true },
+    cp: { plan: 'small', ha: true },
+    clusterSize: 100,
     vpcId: 'vpc-prod',
     subnetIds: ['sn-prod-simin'],
     podCidr: '10.202.0.0/16',
-    svcCidr: '10.98.0.0/16',
+    svcCidr: '10.98.0.0/24',
+    securityGroups: ['Default'],
     apiAccess: 'public',
     createdAt: '2026-09-18T08:41:00Z',
     etcdBackup: { enabled: true, lastRun: 'Today 02:00', restorePoints: 6 },
@@ -187,23 +213,19 @@ export const SEED_CLUSTERS = [
 export const SEED_EVENTS = {
   'aks-prodplatform01': [
     { ts: '10:42:07', type: 'Normal', reason: 'SuccessfulCreate', msg: 'Created pod: api-7f6d9c4b8-x2vqn' },
-    { ts: '10:40:51', type: 'Normal', reason: 'NodeReady', msg: 'Node pool-a-7f2a1 became ready' },
+    { ts: '10:40:51', type: 'Normal', reason: 'NodeReady', msg: 'Node api-pool-7f2a1 became ready' },
     { ts: '09:58:13', type: 'Warning', reason: 'BackOff', msg: 'Back-off restarting failed container checkout in pod checkout-5d8f7b6c9-p4kzt' },
     { ts: '02:00:04', type: 'Normal', reason: 'EtcdBackupSucceeded', msg: 'Control-plane backup uploaded (14 restore points retained)' },
-    { ts: '01:12:38', type: 'Normal', reason: 'ScaleDown', msg: 'Cluster autoscaler removed node pool-a-9d3c5 (underutilized)' },
+    { ts: '01:12:38', type: 'Normal', reason: 'ScaleDown', msg: 'Cluster autoscaler removed node api-pool-9d3c5 (underutilized)' },
   ],
   'aks-staging77': [
-    { ts: '11:03:22', type: 'Normal', reason: 'UpgradeStarted', msg: 'Control-plane upgrade 1.29.8 → 1.30.5 started (KCP rolling replacement)' },
+    { ts: '11:03:22', type: 'Normal', reason: 'UpgradeStarted', msg: 'Control-plane upgrade 1.35.4 → 1.36.3 started (KCP rolling replacement)' },
     { ts: '11:02:10', type: 'Normal', reason: 'PreChecksPassed', msg: 'Pre-upgrade checks and etcd backup completed' },
     { ts: '10:44:59', type: 'Warning', reason: 'PodDisruptionBudget', msg: 'Worker drain delayed by PDB default-deny in namespace shop' },
   ],
   'aks-mlbatch03': [
     { ts: '08:15:40', type: 'Normal', reason: 'SuccessfulCreate', msg: 'Created pod: trainer-0' },
     { ts: '02:00:09', type: 'Normal', reason: 'EtcdBackupSucceeded', msg: 'Control-plane backup uploaded (6 restore points retained)' },
-  ],
-  'aks-edgetest11': [
-    { ts: '07:31:02', type: 'Warning', reason: 'CPUnreachable', msg: 'Control-plane VM cp-2 not reachable over 3 consecutive probes' },
-    { ts: '07:33:44', type: 'Warning', reason: 'EtcdQuorumAtRisk', msg: 'etcd member lost — quorum retained, incident raised' },
   ],
 }
 
@@ -213,21 +235,31 @@ export function apiEndpoint(cluster) {
   return `https://api.${cluster.name}.${API_HOST}`
 }
 
-/* ---------- pricing ---------- */
-export const fmtToman = (n) => n.toLocaleString('en-US')
+/* ---------- pricing (IRR) ---------- */
+export const fmtIRR = (n) => n.toLocaleString('en-US')
 
 export function monthlyPrice({ cp, pools }) {
   const cpPlan = CP_PLANS.find((p) => p.id === cp.plan)
-  const cpCost = cpPlan.price * (cp.ha ? 3 : 1)
+  const cpCost = (cpPlan?.pricePerDay || 0) * 30
   let nodesCost = 0
   let volumeCost = 0
   for (const p of pools) {
     const f = FLAVORS.find((f) => f.id === p.flavor)
-    nodesCost += f.price * p.count
-    volumeCost += VOLUME_PRICE_PER_GB * p.volumeGb * p.count
+    nodesCost += (f?.price || 0) * p.count
+    volumeCost += VOLUME_PRICE_PER_GB * (p.volumeGb || 50) * p.count
   }
-  return { cpCost, nodesCost, volumeCost, total: cpCost + nodesCost + volumeCost }
+  const total = cpCost + nodesCost + volumeCost
+  return {
+    cpCost,
+    nodesCost,
+    volumeCost,
+    total,
+    hourly: Math.max(1_000, Math.round(total / 730 / 1_000) * 1_000),
+  }
 }
 
 export const fmtDate = (iso) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+
+/* Backwards-compat alias */
+export const fmtToman = fmtIRR

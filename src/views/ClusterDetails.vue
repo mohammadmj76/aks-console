@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store, downloadKubeconfig, newerVersionAvailable } from '../store'
-import { REGION, VERSIONS, CP_PLANS, FLAVORS, VPCS, INCLUDED_COMPONENTS, apiEndpoint, fmtDate } from '../data'
+import { REGION, VERSIONS, CP_PLANS, FLAVORS, VPCS, apiEndpoint, fmtDate, flavorName, flavorSpec } from '../data'
 import ArButton from '../components/ui/ArButton.vue'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
@@ -286,7 +286,7 @@ function menuAction(item) {
           <div style="flex: 1; min-width: 0">
             <div class="text-body-1">{{ pool.name }}</div>
             <div class="cell-sub" style="margin-top: 2px">
-              {{ pool.flavor }} · {{ pool.count }} node{{ pool.count === 1 ? '' : 's' }} · ssd-g1 {{ pool.volumeGb }} GB
+              {{ flavorName(pool.flavor) }} ({{ pool.flavor }} · {{ flavorSpec(pool.flavor) }}) · {{ pool.count }} node{{ pool.count === 1 ? '' : 's' }} · ssd-g1 {{ pool.volumeGb }} GB
               · {{ pool.zones.length ? pool.zones.map((z) => REGION.zones.find((zz) => zz.id === z)?.name).join(', ') : 'all zones' }}
             </div>
           </div>
@@ -322,7 +322,7 @@ function menuAction(item) {
                 <td>
                   <span class="ar-tag" :class="n.ready ? 'success' : 'error'"><span class="dot"></span>{{ n.ready ? 'Ready' : 'NotReady' }}</span>
                 </td>
-                <td class="text-body-2 muted">{{ n.flavor }}</td>
+                <td class="text-body-2 muted">{{ flavorName(n.flavor) }}</td>
                 <td class="text-body-2 muted">{{ REGION.zones.find((z) => z.id === n.zone)?.name }}</td>
                 <td class="mono muted">{{ n.ip }}</td>
                 <td><ArProgress :value="n.cpu" :label="n.cpu + '%'" /></td>
