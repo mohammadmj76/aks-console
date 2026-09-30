@@ -555,7 +555,7 @@ function create() {
               </div>
             </div>
 
-            <div class="text-tabs" style="border-bottom: 1px solid var(--st-neutral-t1-1-default)">
+            <div class="pill-tabs">
               <button
                 v-for="c in FLAVOR_CATEGORIES"
                 :key="c"
