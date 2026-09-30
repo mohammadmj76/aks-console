@@ -329,6 +329,21 @@ table.ar-table { width: 100%; border-collapse: collapse; }
 }
 .seg button.on { background: var(--bg-neutral-t1-1-default); color: var(--fg-neutral-t1-1-default); box-shadow: var(--shadow-xs); }
 
+/* text tabs (flavor categories — match Basic/Standard/… mock) */
+.text-tabs { display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap; }
+.text-tabs button {
+  border: 0; background: none; cursor: pointer; font: inherit;
+  font-size: 14px; font-weight: 450; letter-spacing: -0.28px;
+  padding: var(--space-2) 0; color: var(--fg-neutral-t1-3-default);
+  transition: color .15s; position: relative;
+}
+.text-tabs button:hover { color: var(--fg-neutral-t1-2-default); }
+.text-tabs button.on { color: var(--fg-primary-t1-1-default); }
+.text-tabs button.on::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  border-radius: var(--radius-circular); background: var(--bg-primary-t1-1-default);
+}
+
 .chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 var(--space-3);

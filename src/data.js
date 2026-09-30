@@ -49,28 +49,37 @@ const azs = (soldOut = []) =>
   AZS().map((z) => (soldOut.includes(z.id) ? { ...z, soldOut: true } : z))
 
 export const FLAVOR_CATALOG = [
-  // General computing-plus
-  { id: 'g6.large.2',    category: 'General computing-plus', vcpu: 2,  ram: 4,  azs: azs(),                   bandwidth: '0.8 / 4.0 Gbit/s',   pps: '400,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 16,  pricePerHour: 68_685 },
-  { id: 'g6.large.4',    category: 'General computing-plus', vcpu: 2,  ram: 8,  azs: azs(),                   bandwidth: '0.8 / 4.0 Gbit/s',   pps: '400,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 16,  pricePerHour: 93_669 },
-  { id: 'g6.xlarge.2',   category: 'General computing-plus', vcpu: 4,  ram: 8,  azs: azs(),                   bandwidth: '1.6 / 8.0 Gbit/s',   pps: '800,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 32,  pricePerHour: 137_370 },
-  { id: 'g6.xlarge.4',   category: 'General computing-plus', vcpu: 4,  ram: 16, azs: azs(['bamdad', 'simin']), bandwidth: '1.6 / 8.0 Gbit/s',  pps: '800,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 32,  pricePerHour: 187_338 },
-  { id: 'g6.2xlarge.2',  category: 'General computing-plus', vcpu: 8,  ram: 16, azs: azs(),                   bandwidth: '3.0 / 15.0 Gbit/s',  pps: '1,500,000', cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 64,  pricePerHour: 274_740 },
-  { id: 'g6.2xlarge.4',  category: 'General computing-plus', vcpu: 8,  ram: 32, azs: azs(['foroogh', 'bamdad']), bandwidth: '3.0 / 15.0 Gbit/s', pps: '1,500,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 64,  pricePerHour: 374_676 },
-  { id: 'g6.3xlarge.2',  category: 'General computing-plus', vcpu: 12, ram: 24, azs: azs(),                   bandwidth: '5.0 / 17.0 Gbit/s',  pps: '2,000,000', cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 96,  pricePerHour: 412_110 },
-  { id: 'g6.3xlarge.4',  category: 'General computing-plus', vcpu: 12, ram: 48, azs: azs(['foroogh', 'bamdad']), bandwidth: '5.0 / 17.0 Gbit/s', pps: '2,000,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 96,  pricePerHour: 562_014 },
-  { id: 'g6.4xlarge.2',  category: 'General computing-plus', vcpu: 16, ram: 32, azs: azs(),                   bandwidth: '6.0 / 20.0 Gbit/s',  pps: '2,500,000', cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 128, pricePerHour: 549_480 },
-  // General computing
-  { id: 's6.large.2',    category: 'General computing', vcpu: 2,  ram: 4,  azs: azs(),                        bandwidth: '0.5 / 2.0 Gbit/s',  pps: '200,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 16,  pricePerHour: 52_000 },
-  { id: 's6.large.4',    category: 'General computing', vcpu: 2,  ram: 8,  azs: azs(),                        bandwidth: '0.5 / 2.0 Gbit/s',  pps: '200,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 16,  pricePerHour: 78_000 },
-  { id: 's6.xlarge.2',   category: 'General computing', vcpu: 4,  ram: 8,  azs: azs(['simin']),               bandwidth: '1.0 / 4.0 Gbit/s',  pps: '400,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 32,  pricePerHour: 104_000 },
-  { id: 's6.2xlarge.2',  category: 'General computing', vcpu: 8,  ram: 16, azs: azs(),                        bandwidth: '2.0 / 8.0 Gbit/s',  pps: '800,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 64,  pricePerHour: 208_000 },
-  // Memory-optimized
-  { id: 'm6.large.4',    category: 'Memory-optimized', vcpu: 2,  ram: 8,  azs: azs(),                          bandwidth: '0.8 / 4.0 Gbit/s',  pps: '300,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 16,  pricePerHour: 96_000 },
-  { id: 'm6.xlarge.4',   category: 'Memory-optimized', vcpu: 4,  ram: 16, azs: azs(['bamdad']),                bandwidth: '1.6 / 8.0 Gbit/s',  pps: '600,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 32,  pricePerHour: 192_000 },
-  { id: 'm6.2xlarge.4',  category: 'Memory-optimized', vcpu: 8,  ram: 32, azs: azs(),                          bandwidth: '3.0 / 15.0 Gbit/s', pps: '1,200,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 64,  pricePerHour: 384_000 },
+  // Basic
+  { id: 'g6.large.2',    category: 'Basic', vcpu: 2,  ram: 4,  azs: azs(),                   bandwidth: '0.8 / 4.0 Gbit/s',   pps: '400,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 16,  pricePerHour: 68_685 },
+  { id: 'g6.large.4',    category: 'Basic', vcpu: 2,  ram: 8,  azs: azs(),                   bandwidth: '0.8 / 4.0 Gbit/s',   pps: '400,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 16,  pricePerHour: 93_669 },
+  { id: 'g6.xlarge.2',   category: 'Basic', vcpu: 4,  ram: 8,  azs: azs(),                   bandwidth: '1.6 / 8.0 Gbit/s',   pps: '800,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 32,  pricePerHour: 137_370 },
+  { id: 'g6.xlarge.4',   category: 'Basic', vcpu: 4,  ram: 16, azs: azs(['bamdad', 'simin']), bandwidth: '1.6 / 8.0 Gbit/s',  pps: '800,000',   cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 32,  pricePerHour: 187_338 },
+  { id: 'g6.2xlarge.2',  category: 'Basic', vcpu: 8,  ram: 16, azs: azs(),                   bandwidth: '3.0 / 15.0 Gbit/s',  pps: '1,500,000', cpu: 'Intel Ice Lake 2.6GHz',  maxPods: 64,  pricePerHour: 274_740 },
+  // Standard
+  { id: 's6.large.2',    category: 'Standard', vcpu: 2,  ram: 4,  azs: azs(),                        bandwidth: '0.5 / 2.0 Gbit/s',  pps: '200,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 16,  pricePerHour: 52_000 },
+  { id: 's6.large.4',    category: 'Standard', vcpu: 2,  ram: 8,  azs: azs(),                        bandwidth: '0.5 / 2.0 Gbit/s',  pps: '200,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 16,  pricePerHour: 78_000 },
+  { id: 's6.xlarge.2',   category: 'Standard', vcpu: 4,  ram: 8,  azs: azs(['simin']),               bandwidth: '1.0 / 4.0 Gbit/s',  pps: '400,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 32,  pricePerHour: 104_000 },
+  { id: 's6.2xlarge.2',  category: 'Standard', vcpu: 8,  ram: 16, azs: azs(),                        bandwidth: '2.0 / 8.0 Gbit/s',  pps: '800,000',   cpu: 'Intel Sky Lake 2.4GHz', maxPods: 64,  pricePerHour: 208_000 },
+  // Premium
+  { id: 'm6.large.4',    category: 'Premium', vcpu: 2,  ram: 8,  azs: azs(),                          bandwidth: '0.8 / 4.0 Gbit/s',  pps: '300,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 16,  pricePerHour: 96_000 },
+  { id: 'm6.xlarge.4',   category: 'Premium', vcpu: 4,  ram: 16, azs: azs(['bamdad']),                bandwidth: '1.6 / 8.0 Gbit/s',  pps: '600,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 32,  pricePerHour: 192_000 },
+  { id: 'm6.2xlarge.4',  category: 'Premium', vcpu: 8,  ram: 32, azs: azs(),                          bandwidth: '3.0 / 15.0 Gbit/s', pps: '1,200,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 64,  pricePerHour: 384_000 },
+  { id: 'g6.3xlarge.2',  category: 'Premium', vcpu: 12, ram: 24, azs: azs(),                          bandwidth: '5.0 / 17.0 Gbit/s', pps: '2,000,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 96,  pricePerHour: 412_110 },
+  // Premium Plus
+  { id: 'g6.3xlarge.4',  category: 'Premium Plus', vcpu: 12, ram: 48, azs: azs(['foroogh', 'bamdad']), bandwidth: '5.0 / 17.0 Gbit/s', pps: '2,000,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 96,  pricePerHour: 562_014 },
+  { id: 'g6.4xlarge.2',  category: 'Premium Plus', vcpu: 16, ram: 32, azs: azs(),                      bandwidth: '6.0 / 20.0 Gbit/s', pps: '2,500,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 128, pricePerHour: 549_480 },
+  // GPU
+  { id: 'gn6.xlarge.8',  category: 'GPU', vcpu: 8,  ram: 32, azs: azs(['bamdad', 'simin']),           bandwidth: '4.0 / 18.0 Gbit/s', pps: '1,800,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 64,  pricePerHour: 1_240_000 },
+  { id: 'gn6.2xlarge.8', category: 'GPU', vcpu: 12, ram: 48, azs: azs(['bamdad', 'simin']),           bandwidth: '5.0 / 17.0 Gbit/s', pps: '2,000,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 96,  pricePerHour: 2_480_000 },
+  // Spot
+  { id: 'sp6.large.2',   category: 'Spot', vcpu: 2,  ram: 4,  azs: azs(),                          bandwidth: '0.8 / 4.0 Gbit/s',  pps: '400,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 16,  pricePerHour: 21_400 },
+  { id: 'sp6.xlarge.2',  category: 'Spot', vcpu: 4,  ram: 8,  azs: azs(),                          bandwidth: '1.6 / 8.0 Gbit/s',  pps: '800,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 32,  pricePerHour: 42_800 },
+  // Dedicated Server
+  { id: 'd6.xlarge.2',   category: 'Dedicated Server', vcpu: 4,  ram: 8,  azs: azs(),                 bandwidth: '1.6 / 8.0 Gbit/s',  pps: '800,000',   cpu: 'Intel Ice Lake 2.6GHz', maxPods: 32,  pricePerHour: 152_000 },
+  { id: 'd6.2xlarge.2',  category: 'Dedicated Server', vcpu: 8,  ram: 16, azs: azs(['simin']),                bandwidth: '3.0 / 15.0 Gbit/s', pps: '1,500,000', cpu: 'Intel Ice Lake 2.6GHz', maxPods: 64,  pricePerHour: 288_000 },
 ]
 
-export const FLAVOR_CATEGORIES = ['General computing-plus', 'General computing', 'Memory-optimized']
+export const FLAVOR_CATEGORIES = ['Basic', 'Standard', 'Premium', 'Premium Plus', 'GPU', 'Spot', 'Dedicated Server']
 
 export const flavor = (id) => FLAVOR_CATALOG.find((f) => f.id === id)
 export const flavorName = (id) => flavor(id)?.name || id
