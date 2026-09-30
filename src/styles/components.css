@@ -254,10 +254,10 @@ table.ar-table { width: 100%; border-collapse: collapse; }
 .plan .p-spec { font-size: 12px; color: var(--fg-neutral-t1-3-default); line-height: 18px; }
 .plan .p-price { margin-top: var(--space-2); font-size: 12px; font-weight: 450; color: var(--fg-primary-t1-1-default); }
 
-/* type cards with radio (match Region mock style) */
-.type-card { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); }
+/* type cards with radio (match Cluster Type mock — LTR: radio left, specs label|value) */
+.type-card { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-5); }
 .type-card .radio {
-  width: 18px; height: 18px; border-radius: var(--radius-circular); flex: none; margin-top: 1px;
+  width: 18px; height: 18px; border-radius: var(--radius-circular); flex: none; margin-top: 2px;
   border: 1.5px solid var(--st-neutral-t1-2-default); background: #fff; position: relative; transition: all .15s;
 }
 .type-card.selected { border-color: var(--st-primary-t1-1-default); box-shadow: 0 0 0 1px var(--st-primary-t1-1-default); }
@@ -267,7 +267,13 @@ table.ar-table { width: 100%; border-collapse: collapse; }
   background: var(--bg-primary-t1-1-default);
 }
 .type-card .p-body { flex: 1; min-width: 0; }
-.type-card .p-spec span:first-child { text-align: left; }
+.type-card .p-name { font-weight: 450; font-size: 15px; }
+.type-card .p-spec {
+  display: grid; grid-template-columns: 96px 1fr; row-gap: 6px;
+  margin-top: var(--space-3); font-size: 13px; line-height: 18px;
+}
+.type-card .p-spec .k { color: var(--fg-neutral-t1-3-default); }
+.type-card .p-price { margin-top: var(--space-3); font-size: 13px; font-weight: 450; color: var(--fg-primary-t1-1-default); }
 
 /* horizontal scroll wrapper for wide tables */
 .table-scroll { overflow-x: auto; }

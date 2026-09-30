@@ -51,6 +51,32 @@ Component classes (`.ar-btn`, `.ar-card`, `.ar-table`, …) live in
 `src/styles/components.css`; page layout and the console shell are in
 `src/styles/shell.css`.
 
+### UIKit mapping
+
+This prototype re-implements the Ar UIKit look in plain CSS. Each element
+corresponds to a real Ar component — when porting into the real console,
+replace the markup with:
+
+| Prototype | Ar UIKit component |
+| --- | --- |
+| All buttons (`.ar-btn`) | `ArButton` (primary/secondary/tertiary/ghost, sm) |
+| Selectable type/region/flavor cards | `ArCard` (variant `secondary`, `v-model` selection) |
+| Radio circles in cards | `ArRadio` / `ArRadioGroup` |
+| Cluster type Card⇄Table toggle, flavor category tabs | `ArTab` (flat) |
+| Flavor catalog table (filters, selection column, pagination, per-page) | `ArDataTableServer` + `ArPagination` (`sizeChanger`) |
+| Summary rail cards, section cards | `ArCard` + `ArSection` (`title`, `description`, `actions`) |
+| Subnet table | `ArTable` |
+| Firewall multi-select, labels input | `ArSelect` (multiple) / `ArInput` + `ArTag` |
+| Auto-scale-style switches | `ArToggle` |
+| Row/zone checkboxes | `ArCheckbox` |
+| Add-node-pool drawer, delete/upgrade drawers | `ArSidePanel` |
+| Copy feedback | `ArToast` |
+| Empty states | `ArStateEmpty` |
+
+Token names are taken from the uikit MCP catalog. The catalog exposes names
+only (no resolved hex values), so colors are Arvan-console approximations —
+swap in real token values when integrating.
+
 ## Project structure
 
 ```

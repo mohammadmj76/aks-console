@@ -53,6 +53,16 @@ const price = computed(() =>
   })
 )
 
+/* rail helpers */
+const railZones = computed(() =>
+  [...new Set(draft.subnetIds.map((id) => vpc.value?.subnets.find((s) => s.id === id)?.zone).filter(Boolean))]
+)
+const railSubnets = computed(() => {
+  if (!draft.subnetIds.length) return ''
+  const names = draft.subnetIds.map((id) => vpc.value?.subnets.find((s) => s.id === id)?.name)
+  return names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '')
+})
+
 function isValidCidrs(list) {
   return list.every(
     (r) =>
@@ -128,7 +138,7 @@ const fQ = ref('')
 const hideSold = ref(false)
 const hideUnavail = ref(false)
 const page = ref(1)
-const PAGE_SIZE = 5
+const perPage = ref(5)
 
 const vcpuOptions = [...new Set(FLAVOR_CATALOG.map((f) => f.vcpu))].sort((a, b) => a - b)
 const memOptions = [...new Set(FLAVOR_CATALOG.map((f) => f.ram))].sort((a, b) => a - b)
@@ -146,9 +156,9 @@ const filteredFlavors = computed(() =>
     return true
   })
 )
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredFlavors.value.length / PAGE_SIZE)))
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredFlavors.value.length / perPage.value)))
 const pagedFlavors = computed(() =>
-  filteredFlavors.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE)
+  filteredFlavors.value.slice((page.value - 1) * perPage.value, page.value * perPage.value)
 )
 watch([fCat, fVcpu, fMem, fQ, hideSold, hideUnavail], () => { page.value = 1 })
 
@@ -289,12 +299,13 @@ function create() {
               <span class="radio"></span>
               <div class="p-body">
                 <div class="p-name">{{ p.name }}</div>
-                <div class="p-spec" style="display: grid; grid-template-columns: auto 1fr; column-gap: var(--space-4); margin-top: var(--space-2)">
-                  <span class="muted">CPU</span><span>{{ p.vcpu }} vCPU</span>
-                  <span class="muted">RAM</span><span>{{ p.ram }} GB</span>
-                  <span class="muted">Max Nodes</span><span>{{ p.maxNodes }}</span>
+                <div class="p-spec">
+                  <span class="k">CPU</span><span>{{ p.vcpu }} vCPU</span>
+                  <span class="k">Memory</span><span>{{ p.ram }} GB</span>
+                  <span class="k">Max Nodes</span><span>{{ p.maxNodes }}</span>
+                  <span class="k">Max etcd Size</span><span>{{ p.etcdSize }}</span>
                 </div>
-                <div class="p-price" style="margin-top: var(--space-2)">Price: {{ fmtIRR(p.pricePerDay) }} IRR/Day</div>
+                <div class="p-price">Price: {{ fmtIRR(p.pricePerDay) }} IRR/Day</div>
               </div>
             </div>
           </div>
@@ -302,7 +313,7 @@ function create() {
           <div v-else class="table-scroll">
             <table class="ar-table" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md)">
               <thead>
-                <tr><th></th><th>Type</th><th>CPU</th><th>RAM</th><th>Max Nodes</th><th>Price</th></tr>
+                <tr><th></th><th>Type</th><th>CPU</th><th>Memory</th><th>Max Nodes</th><th>Max etcd Size</th><th>Price</th></tr>
               </thead>
               <tbody>
                 <tr
@@ -317,6 +328,7 @@ function create() {
                   <td class="text-body-2">{{ p.vcpu }} vCPU</td>
                   <td class="text-body-2">{{ p.ram }} GB</td>
                   <td class="text-body-2">{{ p.maxNodes }}</td>
+                  <td class="text-body-2">{{ p.etcdSize }}</td>
                   <td class="text-body-2">{{ fmtIRR(p.pricePerDay) }} IRR/Day</td>
                 </tr>
               </tbody>
@@ -628,19 +640,31 @@ function create() {
 
             <div style="display: flex; justify-content: space-between; align-items: center">
               <span class="text-caption-1 muted">
-                Showing {{ filteredFlavors.length ? (page - 1) * PAGE_SIZE + 1 : 0 }}–{{ Math.min(page * PAGE_SIZE, filteredFlavors.length) }} of {{ filteredFlavors.length }}
+                Showing {{ filteredFlavors.length ? (page - 1) * perPage + 1 : 0 }}–{{ Math.min(page * perPage, filteredFlavors.length) }} of {{ filteredFlavors.length }}
               </span>
-              <nav class="ar-pagination" aria-label="Flavor pagination">
-                <button class="ar-page" :disabled="page <= 1" @click="page--">‹</button>
-                <button
-                  v-for="n in pageNumbers"
-                  :key="n"
-                  class="ar-page"
-                  :class="{ current: n === page }"
-                  @click="page = n"
-                >{{ n }}</button>
-                <button class="ar-page" :disabled="page >= totalPages" @click="page++">›</button>
-              </nav>
+              <div style="display: flex; align-items: center; gap: var(--space-4)">
+                <label class="check-line" style="gap: var(--space-2)">
+                  Per page
+                  <span class="ar-input" style="width: 70px; height: 30px">
+                    <select v-model.number="perPage" aria-label="Rows per page" @change="page = 1">
+                      <option :value="5">5</option>
+                      <option :value="10">10</option>
+                      <option :value="20">20</option>
+                    </select>
+                  </span>
+                </label>
+                <nav class="ar-pagination" aria-label="Flavor pagination">
+                  <button class="ar-page" :disabled="page <= 1" @click="page--">‹</button>
+                  <button
+                    v-for="n in pageNumbers"
+                    :key="n"
+                    class="ar-page"
+                    :class="{ current: n === page }"
+                    @click="page = n"
+                  >{{ n }}</button>
+                  <button class="ar-page" :disabled="page >= totalPages" @click="page++">›</button>
+                </nav>
+              </div>
             </div>
 
             <!-- selected specifications -->
@@ -744,68 +768,62 @@ function create() {
 
       <!-- ================= SUMMARY RAIL ================= -->
       <aside class="wizard-rail">
-        <div class="ar-card rail-card" style="display: flex; flex-direction: column; gap: var(--space-3)">
+        <div class="ar-card rail-card">
           <div class="rail-group">
-            <h4>Region</h4>
-            <div class="rail-lines">
-              <div class="line"><span class="lk">Region</span><span class="lv">{{ region?.name }}</span></div>
-              <div class="line"><span class="lk">Kubernetes Version</span><span class="lv">{{ VERSIONS.find((v) => v.id === draft.version)?.patch }}</span></div>
+            <h4>Region and Availability Zone</h4>
+            <div class="rail-text">
+              <p>Region: {{ region?.name }}</p>
+              <p>Availability Zone: {{ railZones.length ? railZones.map(zoneName).join(', ') : '—' }}</p>
+            </div>
+          </div>
+
+          <div class="rail-group">
+            <h4>Cluster Type and Version</h4>
+            <div class="rail-text">
+              <p>Cluster Type: {{ cpPlan?.name }}</p>
+              <p>Kubernetes Version: {{ VERSIONS.find((v) => v.id === draft.version)?.patch }}</p>
             </div>
           </div>
 
           <div class="rail-group">
             <h4>Network</h4>
-            <div class="rail-lines">
-              <div class="line"><span class="lk">VPC</span><span class="lv">{{ vpc?.name || '—' }}</span></div>
-              <div class="line">
-                <span class="lk">Subnet</span>
-                <span class="lv">
-                  <template v-if="draft.subnetIds.length">
-                    {{ draft.subnetIds.slice(0, 2).map((id) => vpc?.subnets.find((s) => s.id === id)?.name).join(', ') }}{{ draft.subnetIds.length > 2 ? ` +${draft.subnetIds.length - 2}` : '' }}
-                  </template>
-                  <template v-else>—</template>
-                </span>
-              </div>
-              <div class="line"><span class="lk">Access</span><span class="lv">{{ draft.accessType === 'single' ? 'Single AZ' : 'Multi AZ' }}</span></div>
-              <div class="line"><span class="lk">Pod CIDR</span><span class="lv mono">{{ cidrStr(draft.podCidrs[0]) }}</span></div>
-              <div class="line"><span class="lk">Service CIDR</span><span class="lv mono">{{ cidrStr(draft.svcCidrs[0]) }}</span></div>
-              <div class="line"><span class="lk">Firewall</span><span class="lv">{{ draft.securityGroups.join(', ') || '—' }}</span></div>
+            <div class="rail-text">
+              <p>VPC: {{ vpc ? `${vpc.name} (${vpc.cidr})` : '—' }}</p>
+              <p>Subnet: {{ railSubnets || '—' }}</p>
+              <p>Access: {{ draft.accessType === 'single' ? 'Single AZ' : 'Multi AZ' }}</p>
+              <p>Pod CIDR: <span class="mono">{{ cidrStr(draft.podCidrs[0]) }}</span></p>
+              <p>Service CIDR: <span class="mono">{{ cidrStr(draft.svcCidrs[0]) }}</span></p>
+              <p>Firewall: {{ draft.securityGroups.join(', ') || '—' }}</p>
             </div>
           </div>
 
           <div class="rail-group">
             <h4>Node Pool</h4>
-            <div class="rail-lines">
-              <div class="line"><span class="lk">Name</span><span class="lv">{{ draft.pool.name || (draft.specs.length ? 'node-pool-1' : '—') }}</span></div>
-              <div class="line"><span class="lk">Flavors</span><span class="lv">{{ draft.specs.length ? draft.specs.map((s) => s.flavorId).join(', ') : '—' }}</span></div>
-              <div class="line" v-if="draft.specs.length"><span class="lk">Nodes</span><span class="lv">{{ draft.pool.count }}</span></div>
-              <div class="line" v-if="draft.specs.length">
-                <span class="lk">AZs</span>
-                <span class="lv">{{ [...new Set(draft.specs.flatMap((s) => s.zones))].map(zoneName).join(', ') || '—' }}</span>
-              </div>
+            <div class="rail-text">
+              <p>Pool Name: {{ draft.pool.name || (draft.specs.length ? 'node-pool-1' : '—') }}</p>
+              <p>Flavors: {{ draft.specs.length ? draft.specs.map((s) => s.flavorId).join(', ') : '—' }}</p>
+              <p v-if="draft.specs.length">Nodes: {{ draft.pool.count }}</p>
+              <p v-if="draft.specs.length">Availability Zone: {{ [...new Set(draft.specs.flatMap((s) => s.zones))].map(zoneName).join(', ') || '—' }}</p>
             </div>
           </div>
 
           <div class="rail-group">
-            <h4>Kubernetes Cluster Name</h4>
-            <div class="rail-lines">
-              <div class="line"><span class="lk">Name</span><span class="lv">{{ draft.name || '—' }}</span></div>
+            <h4>Cluster Name</h4>
+            <div class="rail-text">
+              <p>Name: {{ draft.name || '—' }}</p>
             </div>
           </div>
 
-          <div class="rail-group">
-            <div class="price-block">
-              <span class="ph">{{ fmtIRR(price.hourly) }} <span class="text-caption-1 muted">IRR/Hour</span></span>
-              <span class="text-body-2-strong">{{ fmtIRR(price.total) }} IRR</span>
-            </div>
-            <p class="text-caption-1 muted" style="margin: 0 0 var(--space-2)">Estimated / month · demo pricing</p>
-            <ArButton variant="primary" style="width: 100%" :loading="creating" :disabled="!canCreate" @click="create">
-              Create Kubernetes Cluster
-            </ArButton>
-            <p v-if="!canCreate" class="text-caption-1 muted" style="margin: var(--space-2) 0 0; text-align: center">
-              Complete name, subnets, CIDRs{{ draft.specs.length ? ' and AZ selection' : '' }} to enable creation.
-            </p>
+          <div class="price-line">
+            <span class="ph">{{ fmtIRR(price.hourly) }} <span>IRR/hour</span></span>
+            <span class="pd">{{ fmtIRR(price.hourly * 24) }} IRR/Day</span>
           </div>
+          <ArButton variant="primary" style="width: 100%; margin-top: var(--space-3)" :loading="creating" :disabled="!canCreate" @click="create">
+            Create Kubernetes Cluster
+          </ArButton>
+          <p v-if="!canCreate" class="text-caption-1 muted" style="margin: var(--space-2) 0 0; text-align: center">
+            Complete name, subnets, CIDRs{{ draft.specs.length ? ' and AZ selection' : '' }} to enable creation.
+          </p>
         </div>
       </aside>
     </div>
