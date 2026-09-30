@@ -522,6 +522,20 @@ table.ar-table { width: 100%; border-collapse: collapse; }
 .ar-table tbody tr.selectable.selected { background: var(--bg-primary-t3-1-default); }
 .ar-table tbody tr.selectable.selected td:first-child { box-shadow: inset 3px 0 0 var(--bg-primary-t1-1-default); }
 
+/* radio-as-box for single-select table rows: plain empty rounded square,
+   teal dot centered when active (no nested-box look) */
+.radio-box {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 6px;
+  border: 1px solid var(--st-neutral-t1-2-default); background: var(--bg-neutral-t1-1-default);
+  transition: all .15s;
+}
+.radio-box.on { border-color: var(--bg-primary-t1-1-default); }
+.radio-box.on::after {
+  content: ""; width: 8px; height: 8px; border-radius: var(--radius-circular);
+  background: var(--bg-primary-t1-1-default);
+}
+
 /* ---------- rail summary groups ---------- */
 .rail-group h4 {
   margin: 0 0 var(--space-2); font-size: 12px; font-weight: 450; letter-spacing: .2px;

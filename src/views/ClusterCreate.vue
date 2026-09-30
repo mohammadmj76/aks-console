@@ -110,9 +110,8 @@ function removeLabel(l) {
 const fCat = ref('Basic')
 const fVcpu = ref('')
 const fMem = ref('')
+const fAz = ref('')
 const fQ = ref('')
-const hideSold = ref(false)
-const hideUnavail = ref(false)
 const page = ref(1)
 const perPage = ref(5)
 
@@ -124,11 +123,8 @@ const filteredFlavors = computed(() =>
     if (f.category !== fCat.value) return false
     if (fVcpu.value !== '' && f.vcpu !== +fVcpu.value) return false
     if (fMem.value !== '' && f.ram !== +fMem.value) return false
+    if (fAz.value !== '' && !f.azs.some((z) => z.id === fAz.value && !z.soldOut)) return false
     if (fQ.value && !f.id.toLowerCase().includes(fQ.value.toLowerCase())) return false
-    const soldOutAny = f.azs.some((z) => z.soldOut)
-    const allSoldOut = f.azs.every((z) => z.soldOut)
-    if (hideSold.value && soldOutAny) return false
-    if (hideUnavail.value && allSoldOut) return false
     return true
   })
 )
@@ -136,7 +132,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil(filteredFlavors.value.le
 const pagedFlavors = computed(() =>
   filteredFlavors.value.slice((page.value - 1) * perPage.value, page.value * perPage.value)
 )
-watch([fCat, fVcpu, fMem, fQ, hideSold, hideUnavail], () => { page.value = 1 })
+watch([fCat, fVcpu, fMem, fAz, fQ], () => { page.value = 1 })
 
 const pageNumbers = computed(() => Array.from({ length: totalPages.value }, (_, i) => i + 1))
 
@@ -274,7 +270,6 @@ function create() {
             >
               <span class="radio"></span>
               <div class="t-name">{{ p.name }}</div>
-              <div class="t-spec"><span class="ts-k">CPU</span><span class="ts-v">{{ p.vcpu }} vCPU</span></div>
               <div class="t-spec"><span class="ts-k">Memory</span><span class="ts-v">{{ p.ram }} GB</span></div>
               <div class="t-spec"><span class="ts-k">Max Nodes</span><span class="ts-v">{{ p.maxNodes }}</span></div>
               <div class="t-spec"><span class="ts-k">Max etcd Size</span><span class="ts-v">{{ p.etcdSize }}</span></div>
@@ -285,7 +280,7 @@ function create() {
           <div v-else class="table-scroll">
             <table class="ar-table" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md)">
               <thead>
-                <tr><th></th><th>Type</th><th>CPU</th><th>Memory</th><th>Max Nodes</th><th>Max etcd Size</th><th>Price</th></tr>
+                <tr><th></th><th>Type</th><th>Memory</th><th>Max Nodes</th><th>Max etcd Size</th><th>Price</th></tr>
               </thead>
               <tbody>
                 <tr
@@ -295,9 +290,8 @@ function create() {
                   :class="{ selected: draft.cp.plan === p.id }"
                   @click="selectType(p)"
                 >
-                  <td style="width: 36px"><span class="ar-tag" :class="{ primary: draft.cp.plan === p.id }"><span class="dot"></span></span></td>
+                  <td style="width: 36px"><span class="radio-box" :class="{ on: draft.cp.plan === p.id }"></span></td>
                   <td class="cell-main">{{ p.name }}</td>
-                  <td class="text-body-2">{{ p.vcpu }} vCPU</td>
                   <td class="text-body-2">{{ p.ram }} GB</td>
                   <td class="text-body-2">{{ p.maxNodes }}</td>
                   <td class="text-body-2">{{ p.etcdSize }}</td>
@@ -362,7 +356,9 @@ function create() {
                         :class="{ selected: draft.subnetIds.includes(sn.id) }"
                         @click="toggleSubnet(sn.id)"
                       >
-                        <td><span class="ar-tag" :class="{ primary: draft.subnetIds.includes(sn.id) }"><span class="dot"></span></span></td>
+                        <td @click.stop>
+                          <ArCheckbox :model-value="draft.subnetIds.includes(sn.id)" @update:model-value="toggleSubnet(sn.id)" />
+                        </td>
                         <td><a href="#" @click.prevent.stop>{{ sn.name }}</a></td>
                         <td class="mono text-body-2">{{ sn.cidr }}</td>
                         <td class="text-body-2">{{ REGION.zones.find((z) => z.id === sn.zone)?.name }}</td>
@@ -524,16 +520,22 @@ function create() {
                   <svg class="chev" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
                 </div>
               </div>
+              <div class="ar-field" style="width: 150px">
+                <label>AZ</label>
+                <div class="ar-input">
+                  <select v-model="fAz">
+                    <option value="">All</option>
+                    <option v-for="z in REGION.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
+                  </select>
+                  <svg class="chev" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
+                </div>
+              </div>
               <div class="ar-field" style="flex: 1; min-width: 180px">
                 <label>Flavor</label>
                 <div class="ar-input">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
                   <input v-model="fQ" placeholder="Search flavor name" />
                 </div>
-              </div>
-              <div style="display: flex; flex-direction: column; gap: var(--space-2); justify-content: flex-end; padding-bottom: 2px">
-                <label class="check-line"><ArCheckbox v-model="hideSold" /> Hide sold-out flavors</label>
-                <label class="check-line"><ArCheckbox v-model="hideUnavail" /> Hide unavailable specifications</label>
               </div>
             </div>
 
@@ -557,7 +559,6 @@ function create() {
                     <th>vCPUs / Memory</th>
                     <th>Assured / Max Bandwidth</th>
                     <th>Packets Per Second</th>
-                    <th>CPU</th>
                     <th>Max. Pods</th>
                     <th>Pricing</th>
                   </tr>
@@ -582,12 +583,11 @@ function create() {
                     <td class="text-body-2">{{ f.vcpu }} vCPUs / {{ f.ram }} GiB</td>
                     <td class="text-body-2 muted">{{ f.bandwidth }}</td>
                     <td class="text-body-2 muted">{{ f.pps }} pps</td>
-                    <td class="text-body-2 muted">{{ f.cpu }}</td>
                     <td class="text-body-2">{{ f.maxPods }}</td>
                     <td class="text-body-2-strong">{{ fmtIRR(f.pricePerHour) }} IRR/hour</td>
                   </tr>
                   <tr v-if="!pagedFlavors.length">
-                    <td colspan="9" class="text-body-2 muted" style="text-align: center; padding: var(--space-6)">No flavors match the current filters.</td>
+                    <td colspan="8" class="text-body-2 muted" style="text-align: center; padding: var(--space-6)">No flavors match the current filters.</td>
                   </tr>
                 </tbody>
               </table>
