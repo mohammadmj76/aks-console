@@ -184,7 +184,7 @@ function create() {
       regionId: regionId.value,
       vpcId: draft.vpcId,
       subnetIds: [...draft.subnetIds],
-      securityGroups: [...draft.securityGroups],
+      securityGroups: ['Default'],
       podCidr: cidrStr(draft.podCidrs[0]),
       svcCidr: cidrStr(draft.svcCidrs[0]),
       pool: draft.specs.length
@@ -192,8 +192,8 @@ function create() {
         : null,
     })
     creating.value = false
-    store.toast('info', 'Provisioning started', `${cluster.name} is being created — this usually takes a few minutes.`)
-    router.push(`/clusters/${cluster.id}`)
+    store.toast('info', 'Creating cluster', `${cluster.name} is being created — this usually takes a few minutes.`)
+    router.push('/clusters')
   }, 800)
 }
 </script>

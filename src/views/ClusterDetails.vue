@@ -171,7 +171,7 @@ function menuAction(item) {
     <!-- upgrading / provisioning banners -->
     <div v-if="cluster.status === 'provisioning'" class="ar-card" style="padding: var(--space-4); margin-bottom: var(--space-4)">
       <div style="display: flex; justify-content: space-between; margin-bottom: var(--space-2)">
-        <span class="text-body-2-strong">Provisioning cluster…</span>
+        <span class="text-body-2-strong">Creating cluster…</span>
         <span class="text-caption-1 muted">{{ cluster.progressLabel }} · {{ cluster.progress }}%</span>
       </div>
       <ArProgress :value="cluster.progress" />

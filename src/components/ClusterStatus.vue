@@ -5,7 +5,7 @@ const props = defineProps({ status: { type: String, required: String } })
 
 const map = {
   running: { cls: 'success', label: 'Running', pulse: false },
-  provisioning: { cls: 'info', label: 'Provisioning', pulse: true },
+  provisioning: { cls: 'info', label: 'Creating', pulse: true },
   upgrading: { cls: 'warning', label: 'Upgrading', pulse: true },
   error: { cls: 'error', label: 'Error', pulse: false },
 }

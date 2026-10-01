@@ -36,7 +36,6 @@ export const CP_PLANS = [
   { id: 'small',   name: 'Small',  vcpu: 4,  ram: 16, maxNodes: 100,  etcdSize: '8 GB',  pricePerDay: 3_600_000 },
   { id: 'medium',  name: 'Medium', vcpu: 4,  ram: 32, maxNodes: 250,  etcdSize: '16 GB', pricePerDay: 7_200_000 },
   { id: 'large',   name: 'Large',  vcpu: 8,  ram: 32, maxNodes: 500,  etcdSize: '32 GB', pricePerDay: 14_400_000 },
-  { id: 'xlarge',  name: 'XLarge', vcpu: 16, ram: 64, maxNodes: 1000, etcdSize: '64 GB', pricePerDay: 28_800_000 },
 ]
 
 /* ---------- flavor catalog (worker nodes) ---------- */

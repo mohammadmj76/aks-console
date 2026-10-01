@@ -122,7 +122,7 @@ function menuAction(c, item) {
           <select v-model="status" aria-label="Filter by status">
             <option value="all">All statuses</option>
             <option value="running">Running</option>
-            <option value="provisioning">Provisioning</option>
+            <option value="provisioning">Creating</option>
             <option value="upgrading">Upgrading</option>
             <option value="error">Error</option>
           </select>
