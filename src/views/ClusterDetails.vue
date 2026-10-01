@@ -28,7 +28,69 @@ const tabs = [
   { id: 'pools', label: 'Node pools' },
   { id: 'networking', label: 'Networking' },
   { id: 'operations', label: 'Operations' },
+  { id: 'events', label: 'Events' },
 ]
+
+/* ---------------- events tab ---------------- */
+const evTab = ref('om')
+const evQuery = ref('')
+const evRange = ref('all')
+
+/* O&M events: control-plane / platform events (mock, 30-day retention) */
+const omEvents = computed(() => {
+  const base = (store.events[cluster.value?.id] || []).map((e) => ({
+    generated: `${e.ts}`,
+    name: e.reason,
+    remarks: e.msg,
+    error: e.type === 'Warning' ? 'Check cluster health and node status.' : '—',
+    level: e.type === 'Warning' ? 'Warning' : 'Info',
+  }))
+  const q = evQuery.value.trim().toLowerCase()
+  return base.filter(
+    (e) => !q || e.name.toLowerCase().includes(q) || e.remarks.toLowerCase().includes(q)
+  )
+})
+
+/* Kubernetes events: workload-level events (mock, 1-hour retention) */
+const K8S_EVENT_POOL = [
+  { object: 'Pod', obj: 'coredns-64d5...', name: 'FailedScheduling', msg: 'no nodes available to schedule pods', type: 'Alarm' },
+  { object: 'Pod', obj: 'node-local-dn...', name: 'FailedScheduling', msg: 'no nodes available to schedule pods', type: 'Alarm' },
+  { object: 'Pod', obj: 'everest-csi-co...', name: 'Started', msg: 'Started container driver-registrar', type: 'Normal' },
+  { object: 'Pod', obj: 'node-problem...', name: 'Killing', msg: 'Stopping container node-problem-detector', type: 'Normal' },
+  { object: 'Service', obj: 'metrics-serv...', name: 'SuccessfulCreate', msg: 'Created pod: metrics-server-0', type: 'Normal' },
+  { object: 'Deployment', obj: 'checkout-5d8f...', name: 'ScalingReplicaSet', msg: 'Scaled up replica set to 2', type: 'Normal' },
+  { object: 'Pod', obj: 'checkout-5d8f...', name: 'BackOff', msg: 'Back-off restarting failed container', type: 'Alarm' },
+  { object: 'StatefulSet', obj: 'trainer-0', name: 'SuccessfulDelete', msg: 'Deleted pod: trainer-0', type: 'Normal' },
+]
+const k8sEvents = computed(() => {
+  const q = evQuery.value.trim().toLowerCase()
+  return K8S_EVENT_POOL.filter(
+    (e) => !q || e.name.toLowerCase().includes(q) || e.msg.toLowerCase().includes(q) || e.obj.toLowerCase().includes(q)
+  )
+})
+
+function exportExcel() {
+  const rows = evTab.value === 'om' ? omEvents.value : k8sEvents.value
+  const headers =
+    evTab.value === 'om'
+      ? ['Generated', 'Event Name', 'Event Remarks', 'Level', 'Error Message']
+      : ['Object', 'Object Name', 'Type', 'Event Name', 'Kubernetes Event', 'Last Occurred']
+  const body = rows.map((e) =>
+    evTab.value === 'om'
+      ? [e.generated, e.name, e.remarks, e.level, e.error]
+      : [e.object, e.obj, e.type, e.name, e.msg, 'Oct 01, 2026 17:58:49 GMT+03:30']
+  )
+  const csv = [headers, ...body]
+    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\r\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `${cluster.value?.name || 'cluster'}-${evTab.value === 'om' ? 'om-events' : 'k8s-events'}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+  store.toast('success', 'Export ready', `${a.download} downloaded (Excel-compatible CSV).`)
+}
 
 /* fake 24h usage series seeded per cluster */
 function seedSeries(base, spread) {
@@ -126,6 +188,7 @@ function menuAction(item) {
   if (item.action === 'kube') downloadKubeconfig(cluster.value)
   if (item.action === 'delete') deleteOpen.value = true
 }
+
 </script>
 
 <template>
@@ -438,6 +501,110 @@ function menuAction(item) {
           </div>
           <p class="text-caption-1 muted" style="margin: var(--space-3) 0 0">Audit log delivery is managed with your Cloud Logs project — see the Cloud Logs console.</p>
         </div>
+      </div>
+    </template>
+
+    <!-- ================= EVENTS ================= -->
+    <template v-if="tab === 'events'">
+      <div class="ar-card" style="padding: var(--space-6)">
+        <nav class="ar-tabs" style="margin-bottom: var(--space-5)">
+          <button class="ar-tab" :class="{ active: evTab === 'om' }" @click="evQuery = ''; evTab = 'om'">O&amp;M Events</button>
+          <button class="ar-tab" :class="{ active: evTab === 'k8s' }" @click="evQuery = ''; evTab = 'k8s'">Kubernetes Event</button>
+        </nav>
+
+        <div v-if="evTab === 'om'" class="banner info" style="margin-bottom: var(--space-4); align-items: flex-start">
+          <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
+          <span>O&amp;M events refer to control-plane events (including cluster events and node events). Events are retained for 30 days. After 30 days, data is automatically cleared. A maximum of 15 days of events can be queried.</span>
+        </div>
+        <div v-else class="banner info" style="margin-bottom: var(--space-4); align-items: flex-start">
+          <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
+          <span>Kubernetes events refer to cluster events involving internal resources, such as workloads, Services, and storage resources. Events will be retained for 1 hour and then automatically deleted.</span>
+        </div>
+
+        <div class="ev-toolbar">
+          <div v-if="evTab === 'om'" class="ar-input" style="width: 160px; height: 34px">
+            <select v-model="evRange" aria-label="Time range">
+              <option value="all">All time</option>
+              <option value="1d">Last 1 day</option>
+              <option value="7d">Last 7 days</option>
+              <option value="15d">Last 15 days</option>
+            </select>
+            <svg class="chev" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
+          </div>
+          <label class="ar-input ev-search">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+            <input v-model="evQuery" type="search" placeholder="Select a property or enter a keyword." />
+          </label>
+          <ArButton variant="secondary" sm @click="exportExcel">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m0 0 3-3M8 10 5 7M3 13h10"/></svg>
+            Export
+          </ArButton>
+        </div>
+
+        <!-- O&M events table -->
+        <div v-if="evTab === 'om'" class="table-scroll">
+          <table class="ar-table">
+            <thead>
+              <tr>
+                <th>Generated <span class="sort-ico">⇅</span></th>
+                <th style="width: 110px">Level</th>
+                <th style="width: 200px">Event Name <span class="sort-ico">⇅</span></th>
+                <th>Event Remarks <span class="sort-ico">⇅</span></th>
+                <th style="width: 260px">Error Message <span class="sort-ico">⇅</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(e, i) in omEvents" :key="i">
+                <td class="mono muted">{{ e.generated }}</td>
+                <td><span class="ar-badge" :class="e.level === 'Warning' ? 'warning' : 'neutral'">{{ e.level }}</span></td>
+                <td class="text-body-2-strong">{{ e.name }}</td>
+                <td class="text-body-2 muted">{{ e.remarks }}</td>
+                <td class="text-body-2" :class="e.error === '—' ? 'muted' : ''">{{ e.error }}</td>
+              </tr>
+              <tr v-if="!omEvents.length">
+                <td colspan="5" class="text-body-2-strong" style="text-align: center; padding: var(--space-8)">No data available.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Kubernetes events table -->
+        <div v-else class="table-scroll">
+          <table class="ar-table">
+            <thead>
+              <tr>
+                <th style="width: 130px">Object <span class="sort-ico">⇅</span></th>
+                <th style="width: 90px">Type</th>
+                <th style="width: 200px">Event Name <span class="sort-ico">⇅</span></th>
+                <th>Kubernetes Event <span class="sort-ico">⇅</span></th>
+                <th style="width: 220px">Last Occurred <span class="sort-ico">⇅</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(e, i) in k8sEvents" :key="i">
+                <td>
+                  <div class="cell-main">{{ e.object }}</div>
+                  <div class="cell-sub mono">{{ e.obj }}</div>
+                </td>
+                <td>
+                  <span class="ar-tag" :class="e.type === 'Alarm' ? 'warning' : 'success'">
+                    <span class="dot"></span>{{ e.type }}
+                  </span>
+                </td>
+                <td class="text-body-2-strong">{{ e.name }}</td>
+                <td class="text-body-2 muted">{{ e.msg }}</td>
+                <td class="text-body-2 muted">Oct 01, 2026 17:58:49 GMT+03:30</td>
+              </tr>
+              <tr v-if="!k8sEvents.length">
+                <td colspan="5" class="text-body-2-strong" style="text-align: center; padding: var(--space-8)">No data available.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-caption-1 muted" style="margin: var(--space-3) 0 0">
+          Total Records: {{ evTab === 'om' ? omEvents.length : k8sEvents.length }}
+        </p>
       </div>
     </template>
 
