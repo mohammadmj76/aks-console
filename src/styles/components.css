@@ -366,11 +366,11 @@ table.ar-table { width: 100%; border-collapse: collapse; }
 
 /* pill tabs (flavor categories — rounded pill container, active = white pill + teal text) */
 .pill-tabs {
-  display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  display: inline-flex; align-items: center; gap: var(--space-2);
   background: var(--bg-neutral-t1-4-default);
   border-radius: var(--radius-circular);
   padding: 6px;
-  max-width: 100%;
+  width: fit-content;
 }
 .pill-tabs button {
   border: 0; background: none; cursor: pointer; font: inherit;
