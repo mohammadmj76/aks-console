@@ -293,6 +293,21 @@ table.ar-table { width: 100%; border-collapse: collapse; }
 .table-scroll { overflow-x: auto; }
 .table-scroll .ar-table { min-width: 640px; }
 
+/* cluster scale pills (Huawei-style node-count selector, teal) */
+.scale-wrap { display: flex; flex-direction: column; gap: var(--space-4); }
+.scale-pills { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.scale-pill {
+  border: 0; cursor: pointer; font: inherit;
+  font-size: 14px; font-weight: 450; letter-spacing: -0.28px;
+  padding: 10px 24px; border-radius: var(--radius-md);
+  background: var(--bg-primary-t3-1-default); color: var(--fg-primary-t1-1-default);
+  transition: all .15s;
+}
+.scale-pill:hover { filter: brightness(.97); }
+.scale-pill.on { background: var(--bg-primary-t1-1-default); color: var(--fg-neutral-t2-1-default); }
+.scale-note { margin: 0; font-size: 13px; line-height: 20px; color: var(--fg-neutral-t1-2-default); max-width: 860px; }
+.scale-note strong { font-weight: 450; color: var(--fg-neutral-t1-1-default); }
+
 /* ---------- key/value rows ---------- */
 .kv { display: flex; flex-direction: column; }
 .kv .row {

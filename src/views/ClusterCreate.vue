@@ -256,9 +256,29 @@ function create() {
           <div class="seg" style="margin-bottom: var(--space-4)">
             <button :class="{ on: typeView === 'card' }" @click="typeView = 'card'">Card</button>
             <button :class="{ on: typeView === 'table' }" @click="typeView = 'table'">Table</button>
+            <button :class="{ on: typeView === 'scale' }" @click="typeView = 'scale'">Scale</button>
           </div>
 
-          <div v-if="typeView === 'card'" class="type-rows">
+          <!-- scale selector: pick the max node count, CP flavor follows -->
+          <div v-if="typeView === 'scale'" class="scale-wrap">
+            <div class="scale-pills">
+              <button
+                v-for="p in CP_PLANS"
+                :key="p.id"
+                class="scale-pill"
+                :class="{ on: draft.cp.plan === p.id }"
+                @click="selectType(p)"
+              >Nodes: {{ fmtIRR(p.maxNodes) }}</button>
+            </div>
+            <p class="scale-note">
+              Select the maximum number of nodes that can be managed by the cluster. The scale of a cluster determines the flavor of the master nodes. After the cluster is created, you can upgrade the flavor of the master nodes, <strong>but you cannot downgrade it.</strong>
+            </p>
+            <p class="scale-note">
+              Typically, a cluster may not achieve the maximum node count within the selected scale due to factors such as the type, quantity, and size of resource objects within the cluster, as well as the volume of access requests from external systems to kube-apiserver. To prevent cluster overload, strengthen the cluster by monitoring its resource usage.
+            </p>
+          </div>
+
+          <div v-else-if="typeView === 'card'" class="type-rows">
             <div
               v-for="p in CP_PLANS"
               :key="p.id"
@@ -275,7 +295,7 @@ function create() {
             </div>
           </div>
 
-          <div v-else class="table-scroll">
+          <div v-else-if="typeView === 'table'" class="table-scroll">
             <table class="ar-table" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md)">
               <thead>
                 <tr><th></th><th>Type</th><th>Memory</th><th>Max Nodes</th><th>Max etcd Size</th><th>Price</th></tr>
