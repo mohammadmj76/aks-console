@@ -1,9 +1,11 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 /* Custom dropdown menu replacing the native select popup —
    matches the ArSelect look: floating white menu, rounded corners,
-   Ar shadow, teal selected/hover states. Keyboard + outside-click. */
+   Ar shadow, teal selected/hover states. Keyboard + outside-click.
+   The menu is teleported to <body> and positioned over the trigger
+   (flipping up when there is no room below). */
 const props = defineProps({
   options: { type: Array, required: true }, // [{ value, label }] or strings
   modelValue: { type: [String, Number], default: '' },
@@ -19,7 +21,32 @@ const current = computed(() => norm.value.find((o) => o.value === props.modelVal
 
 const open = ref(false)
 const root = ref(null)
+const pop = ref(null)
 const activeIdx = ref(-1)
+const pos = ref({ top: 0, left: 0, minWidth: 0 })
+const dropUp = ref(false)
+
+function viewportHeight() {
+  const vv = window.visualViewport
+  const h = vv?.height || window.innerHeight || document.documentElement.clientHeight || 0
+  return h > 0 ? h : 800 // sane fallback when the viewport can't be measured
+}
+function place() {
+  const el = root.value
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  const vh = viewportHeight()
+  const spaceBelow = vh - r.bottom
+  const estHeight = Math.min(300, norm.value.length * 40 + 12)
+  dropUp.value = spaceBelow < estHeight + 12 && r.top > estHeight + 12
+  pos.value = {
+    left: r.left,
+    minWidth: r.width,
+    ...(dropUp.value
+      ? { bottom: vh - r.top + 6 }
+      : { top: r.bottom + 6 }),
+  }
+}
 
 function pick(opt) {
   emit('update:modelValue', opt.value)
@@ -30,10 +57,17 @@ function toggle() {
   open.value = !open.value
   if (open.value) {
     activeIdx.value = norm.value.findIndex((o) => o.value === props.modelValue)
+    nextTick(() => {
+      place()
+      // keep the selected option in view
+      const sel = pop.value?.querySelector('.asm-opt.sel')
+      sel?.scrollIntoView({ block: 'nearest' })
+    })
   }
 }
 function onDocClick(e) {
-  if (root.value && !root.value.contains(e.target)) open.value = false
+  if (root.value?.contains(e.target) || pop.value?.contains(e.target)) return
+  open.value = false
 }
 function onKey(e) {
   if (!open.value) {
@@ -54,8 +88,19 @@ function onKey(e) {
     if (norm.value[activeIdx.value]) pick(norm.value[activeIdx.value])
   }
 }
-onMounted(() => document.addEventListener('click', onDocClick))
-onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
+function onReposition() {
+  if (open.value) place()
+}
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  window.addEventListener('scroll', onReposition, true)
+  window.addEventListener('resize', onReposition)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClick)
+  window.removeEventListener('scroll', onReposition, true)
+  window.removeEventListener('resize', onReposition)
+})
 </script>
 
 <template>
@@ -65,7 +110,13 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       <svg class="chev" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
     </button>
     <Teleport to="body">
-      <div v-if="open" class="asm-pop" :style="{}">
+      <div
+        v-if="open"
+        ref="pop"
+        class="asm-pop"
+        :class="{ up: dropUp }"
+        :style="{ left: pos.left + 'px', minWidth: pos.minWidth + 'px', ...(dropUp ? { bottom: pos.bottom + 'px' } : { top: pos.top + 'px' }) }"
+      >
         <button
           v-for="(o, i) in norm"
           :key="o.value"
@@ -98,10 +149,13 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 .asm-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asm-trigger .chev { color: var(--fg-neutral-t1-3-default); transition: transform .15s; }
 .asm-trigger.open .chev { transform: rotate(180deg); color: var(--fg-primary-t1-1-default); }
+</style>
 
+<style>
+/* teleported menu lives outside the component — unscoped styles */
 .asm-pop {
-  position: fixed; z-index: 70; min-width: 100%;
-  padding: 6px; margin-top: 6px;
+  position: fixed; z-index: 70;
+  padding: 6px;
   background: var(--bg-neutral-t1-1-default);
   border: 1px solid var(--st-neutral-t1-1-default);
   border-radius: var(--radius-lg);
@@ -110,6 +164,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
   animation: asmIn .14s cubic-bezier(.2,.7,.2,1);
   transform-origin: top center;
 }
+.asm-pop.up { transform-origin: bottom center; }
 @keyframes asmIn { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
 .asm-opt {
   display: flex; align-items: center; width: 100%;
