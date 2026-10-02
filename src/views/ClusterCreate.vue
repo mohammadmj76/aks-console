@@ -9,6 +9,7 @@ import {
 import ArButton from '../components/ui/ArButton.vue'
 import ArCheckbox from '../components/ui/ArCheckbox.vue'
 import ArToggle from '../components/ui/ArToggle.vue'
+import ArSelectMenu from '../components/ui/ArSelectMenu.vue'
 
 const router = useRouter()
 
@@ -401,12 +402,12 @@ function create() {
               <div v-for="(row, i) in draft.podCidrs" :key="i" class="cidr-row">
                 <span class="cidr-idx">{{ i + 1 }}</span>
                 <div class="cidr-octets">
-                  <span class="oct-box sel">
-                    <select v-model="row.octets[0]" aria-label="First octet">
-                      <option v-for="o in ['10', '172', '192']" :key="o" :value="o">{{ o }}</option>
-                    </select>
-                    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
-                  </span>
+                  <ArSelectMenu
+                    class="oct-box sel"
+                    v-model="row.octets[0]"
+                    :options="['10', '172', '192']"
+                    aria-label="First octet"
+                  />
                   <span class="dot-sep">.</span>
                   <span class="oct-box"><input :value="row.octets[1]" inputmode="numeric" @input="octetInput($event, row, 1)" aria-label="Octet 2" /></span>
                   <span class="dot-sep">.</span>
@@ -414,12 +415,12 @@ function create() {
                   <span class="dot-sep">.</span>
                   <span class="oct-box"><input :value="row.octets[3]" inputmode="numeric" @input="octetInput($event, row, 3)" aria-label="Octet 4" /></span>
                   <span class="slash">/</span>
-                  <span class="oct-box sel">
-                    <select v-model="row.prefix" aria-label="Prefix">
-                      <option v-for="p in ['8','12','16','17','18','20','22','24','26','28']" :key="p" :value="p">{{ p }}</option>
-                    </select>
-                    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
-                  </span>
+                  <ArSelectMenu
+                    class="oct-box sel oct-prefix"
+                    v-model="row.prefix"
+                    :options="['8','12','16','17','18','20','22','24','26','28']"
+                    aria-label="Prefix"
+                  />
                 </div>
                 <button class="cidr-btn" :disabled="draft.podCidrs.length <= 1" @click="removeCidr(draft.podCidrs, i)" aria-label="Remove CIDR">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 4h10M5.5 4V3h5v1M4.5 4l.7 9h5.6l.7-9"/></svg>
@@ -448,12 +449,12 @@ function create() {
               <div v-for="(row, i) in draft.svcCidrs" :key="i" class="cidr-row">
                 <span class="cidr-idx">{{ i + 1 }}</span>
                 <div class="cidr-octets">
-                  <span class="oct-box sel">
-                    <select v-model="row.octets[0]" aria-label="First octet">
-                      <option v-for="o in ['10', '172', '192']" :key="o" :value="o">{{ o }}</option>
-                    </select>
-                    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
-                  </span>
+                  <ArSelectMenu
+                    class="oct-box sel"
+                    v-model="row.octets[0]"
+                    :options="['10', '172', '192']"
+                    aria-label="First octet"
+                  />
                   <span class="dot-sep">.</span>
                   <span class="oct-box"><input :value="row.octets[1]" inputmode="numeric" @input="octetInput($event, row, 1)" aria-label="Octet 2" /></span>
                   <span class="dot-sep">.</span>
@@ -461,12 +462,12 @@ function create() {
                   <span class="dot-sep">.</span>
                   <span class="oct-box"><input :value="row.octets[3]" inputmode="numeric" @input="octetInput($event, row, 3)" aria-label="Octet 4" /></span>
                   <span class="slash">/</span>
-                  <span class="oct-box sel">
-                    <select v-model="row.prefix" aria-label="Prefix">
-                      <option v-for="p in ['8','12','16','17','18','20','22','24','26','28']" :key="p" :value="p">{{ p }}</option>
-                    </select>
-                    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6.5 4 4 4-4"/></svg>
-                  </span>
+                  <ArSelectMenu
+                    class="oct-box sel oct-prefix"
+                    v-model="row.prefix"
+                    :options="['8','12','16','17','18','20','22','24','26','28']"
+                    aria-label="Prefix"
+                  />
                 </div>
                 <button class="cidr-btn" :disabled="draft.svcCidrs.length <= 1" @click="removeCidr(draft.svcCidrs, i)" aria-label="Remove CIDR">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 4h10M5.5 4V3h5v1M4.5 4l.7 9h5.6l.7-9"/></svg>

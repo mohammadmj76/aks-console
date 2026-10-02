@@ -494,8 +494,12 @@ table.ar-table { width: 100%; border-collapse: collapse; }
   background: transparent; font: inherit; font-size: 14px; color: var(--fg-neutral-t1-1-default);
   padding: 0 24px 0 12px; cursor: pointer; border-radius: var(--radius-md);
 }
-/* native dropdown popup (Chrome/Edge): rounded, floating, Ar shadow */
-.oct-box select option { border-radius: var(--radius-md); }
+/* ArSelectMenu inside the octet row */
+.oct-box.ar-select-menu { display: inline-flex; }
+.oct-box.sel.ar-select-menu { width: 72px; }
+.oct-prefix { width: 72px !important; }
+.oct-box.ar-select-menu .asm-trigger { height: 36px; border: 0; background: transparent; padding: 0 10px; }
+.oct-box.ar-select-menu .asm-label { flex: 1; text-align: left; }
 .oct-box .chev { position: absolute; right: 9px; pointer-events: none; color: var(--fg-neutral-t1-3-default); }
 .oct-box.sel { width: 72px; }
 .cidr-octets .dot-sep, .cidr-octets .slash { color: var(--fg-neutral-t1-3-default); font-size: 14px; }
