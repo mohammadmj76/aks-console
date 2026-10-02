@@ -414,10 +414,10 @@ table.ar-table { width: 100%; border-collapse: collapse; }
   padding: var(--space-2) 0; color: var(--fg-neutral-t1-3-default); font-size: 12.5px; line-height: 18px;
 }
 
-.count-input { display: inline-flex; align-items: center; border: 1px solid var(--st-neutral-t1-2-default); border-radius: var(--radius-md); height: 38px; overflow: hidden; }
+.count-input { display: inline-flex; align-items: stretch; border: 1px solid var(--st-neutral-t1-2-default); border-radius: var(--radius-md); height: 38px; overflow: hidden; }
 .count-input button {
-  width: 36px; height: 100%; border: 0; background: var(--bg-neutral-t1-1-default); cursor: pointer;
-  font-size: 16px; color: var(--fg-neutral-t1-2-default);
+  width: 36px; height: auto; border: 0; background: var(--bg-neutral-t1-1-default); cursor: pointer;
+  font-size: 16px; color: var(--fg-neutral-t1-2-default); flex: none; display: inline-flex; align-items: center; justify-content: center;
 }
 .count-input button:hover:not(:disabled) { background: var(--bg-neutral-t1-4-default); }
 .count-input button:disabled { opacity: .35; cursor: not-allowed; }
@@ -426,6 +426,8 @@ table.ar-table { width: 100%; border-collapse: collapse; }
   font: inherit; font-size: 14px; color: var(--fg-neutral-t1-1-default);
   border-left: 1px solid var(--st-neutral-t1-1-default); border-right: 1px solid var(--st-neutral-t1-1-default);
 }
+.count-input button.sm, .count-input input { flex: none; }
+.count-input.sm-scale { height: 30px; }
 
 /* ---------- region cards (match Region mock) ---------- */
 .region-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: var(--space-3); }

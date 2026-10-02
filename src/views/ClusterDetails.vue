@@ -361,10 +361,10 @@ function menuAction(item) {
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: var(--space-2)">
-            <div class="count-input" style="height: 30px">
-              <button class="sm" style="width: 28px" :disabled="cluster.status !== 'running' || pool.count <= 1" @click="store.scalePool(cluster, pool, -1)">−</button>
-              <input :value="pool.count" readonly style="width: 40px; font-size: 13px" />
-              <button class="sm" style="width: 28px" :disabled="cluster.status !== 'running' || pool.count >= 20" @click="store.scalePool(cluster, pool, 1)">+</button>
+            <div class="count-input sm-scale">
+              <button :disabled="cluster.status !== 'running' || pool.count <= 1" @click="store.scalePool(cluster, pool, -1)">−</button>
+              <input :value="pool.count" readonly />
+              <button :disabled="cluster.status !== 'running' || pool.count >= 20" @click="store.scalePool(cluster, pool, 1)">+</button>
             </div>
             <ActionMenu
               :items="[

@@ -72,13 +72,7 @@ function menuAction(c, item) {
           <span class="ar-badge beta pill">Beta</span>
           <span class="ar-badge neutral pill">{{ REGION.name }}</span>
         </div>
-        <div class="meta">
-          <span class="text-body-2 muted">Managed clusters with dedicated control planes, VPC-native networking and node pools.</span>
-          <a class="text-caption-1-strong" href="#" @click.prevent>
-            Docs
-            <svg style="vertical-align: -2px" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3H3v10h10v-3M9 3h4v4M13 3 7.5 8.5"/></svg>
-          </a>
-        </div>
+        <div class="meta"></div>
       </div>
       <router-link to="/clusters/create" class="ar-btn primary" style="text-decoration: none">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
@@ -94,9 +88,6 @@ function menuAction(c, item) {
       </StatCard>
       <StatCard label="WORKER NODES" :value="String(totalNodes)" :unit="`/ ${QUOTA.nodes} quota`">
         <span class="text-caption-1 muted">Across {{ store.clusters.length }} clusters in {{ REGION.name }}</span>
-      </StatCard>
-      <StatCard label="CONTROL PLANES" :value="String(store.clusters.length)" badge="etcd backups on" badge-tone="success">
-        <span class="text-caption-1 muted">Dedicated, multi-AZ where HA is enabled</span>
       </StatCard>
       <StatCard
         label="NEEDS ATTENTION"
