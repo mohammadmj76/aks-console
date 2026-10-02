@@ -122,6 +122,7 @@ const filteredFlavors = computed(() =>
     if (f.category !== fCat.value) return false
     if (fVcpu.value !== '' && f.vcpu !== +fVcpu.value) return false
     if (fMem.value !== '' && f.ram !== +fMem.value) return false
+    // values arrive as strings from ArSelectMenu — comparisons above already coerce with +
     if (fAz.value !== '' && !f.azs.some((z) => z.id === fAz.value && !z.soldOut)) return false
     if (fQ.value && !f.id.toLowerCase().includes(fQ.value.toLowerCase())) return false
     return true
@@ -322,12 +323,11 @@ function create() {
 
           <div class="ar-field" style="margin-top: var(--space-6); max-width: 520px">
             <label>Kubernetes Version<span class="req">*</span></label>
-            <div class="ar-input">
-              <select v-model="draft.version">
-                <option v-for="v in VERSIONS" :key="v.id" :value="v.id">{{ v.patch }}</option>
-              </select>
-              <svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
-            </div>
+            <ArSelectMenu
+              v-model="draft.version"
+              :options="VERSIONS.map((v) => ({ value: v.id, label: v.patch }))"
+              aria-label="Kubernetes Version"
+            />
             <div class="banner info" style="margin-top: var(--space-2)">
               <svg style="flex:none" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
               <span>We generally recommend the latest version unless your team has a specific need.</span>
@@ -350,13 +350,12 @@ function create() {
             <div style="display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-6)">
               <div class="ar-field" style="max-width: 520px">
                 <label>VPC<span class="req">*</span></label>
-                <div class="ar-input">
-                  <select v-model="draft.vpcId" @change="draft.subnetIds = []">
-                    <option value="" disabled>Select a VPC…</option>
-                    <option v-for="v in VPCS" :key="v.id" :value="v.id">{{ v.name }} ({{ v.cidr }})</option>
-                  </select>
-                  <svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
-                </div>
+                <ArSelectMenu
+                  v-model="draft.vpcId"
+                  :options="[{ value: '', label: 'Select a VPC…' }, ...VPCS.map((v) => ({ value: v.id, label: `${v.name} (${v.cidr})` }))]"
+                  aria-label="VPC"
+                  @update:model-value="draft.subnetIds = []"
+                />
               </div>
 
               <div class="ar-field">
@@ -518,33 +517,27 @@ function create() {
             <div class="flavor-filter">
               <div class="ar-field" style="width: 130px">
                 <label>vCPUs</label>
-                <div class="ar-input">
-                  <select v-model="fVcpu">
-                    <option value="">All</option>
-                    <option v-for="v in vcpuOptions" :key="v" :value="v">{{ v }}</option>
-                  </select>
-                  <svg class="chev" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
-                </div>
+                <ArSelectMenu
+                  v-model="fVcpu"
+                  :options="[{ value: '', label: 'All' }, ...vcpuOptions.map((v) => ({ value: String(v), label: String(v) }))]"
+                  aria-label="vCPUs"
+                />
               </div>
               <div class="ar-field" style="width: 130px">
                 <label>Memory</label>
-                <div class="ar-input">
-                  <select v-model="fMem">
-                    <option value="">All</option>
-                    <option v-for="m in memOptions" :key="m" :value="m">{{ m }}</option>
-                  </select>
-                  <svg class="chev" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
-                </div>
+                <ArSelectMenu
+                  v-model="fMem"
+                  :options="[{ value: '', label: 'All' }, ...memOptions.map((m) => ({ value: String(m), label: String(m) }))]"
+                  aria-label="Memory"
+                />
               </div>
               <div class="ar-field" style="width: 150px">
                 <label>AZ</label>
-                <div class="ar-input">
-                  <select v-model="fAz">
-                    <option value="">All</option>
-                    <option v-for="z in REGION.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
-                  </select>
-                  <svg class="chev" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
-                </div>
+                <ArSelectMenu
+                  v-model="fAz"
+                  :options="[{ value: '', label: 'All' }, ...REGION.zones.map((z) => ({ value: z.id, label: z.name }))]"
+                  aria-label="AZ"
+                />
               </div>
               <div class="ar-field" style="flex: 1; min-width: 180px">
                 <label>Flavor</label>
@@ -616,13 +609,13 @@ function create() {
               <div style="display: flex; align-items: center; gap: var(--space-4)">
                 <label class="check-line" style="gap: var(--space-2)">
                   Per page
-                  <span class="ar-input" style="width: 70px; height: 30px">
-                    <select v-model.number="perPage" aria-label="Rows per page" @change="page = 1">
-                      <option :value="5">5</option>
-                      <option :value="10">10</option>
-                      <option :value="20">20</option>
-                    </select>
-                  </span>
+                  <ArSelectMenu
+                    class="per-page-menu"
+                    v-model="perPage"
+                    :options="[{ value: 5, label: '5' }, { value: 10, label: '10' }, { value: 20, label: '20' }]"
+                    aria-label="Rows per page"
+                    @update:model-value="page = 1"
+                  />
                 </label>
                 <nav class="ar-pagination" aria-label="Flavor pagination">
                   <button class="ar-page" :disabled="page <= 1" @click="page--">‹</button>
