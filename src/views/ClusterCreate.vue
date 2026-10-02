@@ -393,7 +393,7 @@ function create() {
           </div>
 
           <!-- Container Network -->
-          <div class="net-block">
+          <div class="net-block" style="border-top: 0; padding-top: var(--space-2)">
             <div class="collapse-head static" style="padding: var(--space-4) 0">
               <span class="text-body-1">Container Network<span class="req">*</span></span>
             </div>
@@ -440,7 +440,7 @@ function create() {
           </div>
 
           <!-- Service Network -->
-          <div class="net-block" style="border-bottom: 0">
+          <div class="net-block" style="border-top: 0">
             <div class="collapse-head static" style="padding: var(--space-4) 0">
               <span class="text-body-1">Service Network<span class="req">*</span></span>
             </div>
@@ -806,7 +806,7 @@ function create() {
   margin-bottom: var(--space-5);
   border-bottom: 1px solid var(--st-neutral-t1-1-default);
 }
-.net-block { border-top: 1px solid var(--st-neutral-t1-1-default); }
+.net-block { padding-top: var(--space-2); }
 .check-line {
   display: inline-flex; align-items: center; gap: var(--space-2);
   font-size: 13px; color: var(--fg-neutral-t1-2-default); cursor: pointer;

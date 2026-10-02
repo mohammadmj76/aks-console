@@ -144,6 +144,8 @@
 }
 .ar-input input::placeholder { color: var(--fg-neutral-t1-3-default); }
 .ar-input select { appearance: none; cursor: pointer; height: 100%; }
+/* native dropdown popup: rounded + elevated like the ArSelect menu */
+.ar-input select option, .oct-box select option { border-radius: var(--radius-md); }
 .ar-input .prefix { font-size: 13px; color: var(--fg-neutral-t1-3-default); }
 .ar-input.error-mode { border-color: var(--bg-error-t1-1-default); }
 .ar-input .chev { color: var(--fg-neutral-t1-3-default); }
@@ -492,6 +494,8 @@ table.ar-table { width: 100%; border-collapse: collapse; }
   background: transparent; font: inherit; font-size: 14px; color: var(--fg-neutral-t1-1-default);
   padding: 0 24px 0 12px; cursor: pointer; border-radius: var(--radius-md);
 }
+/* native dropdown popup (Chrome/Edge): rounded, floating, Ar shadow */
+.oct-box select option { border-radius: var(--radius-md); }
 .oct-box .chev { position: absolute; right: 9px; pointer-events: none; color: var(--fg-neutral-t1-3-default); }
 .oct-box.sel { width: 72px; }
 .cidr-octets .dot-sep, .cidr-octets .slash { color: var(--fg-neutral-t1-3-default); font-size: 14px; }
