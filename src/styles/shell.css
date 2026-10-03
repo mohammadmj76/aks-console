@@ -114,6 +114,10 @@
 .stat-card .value { margin: 0 0 var(--space-3); }
 .stat-card .unit { font-size: 14px; font-weight: 325; color: var(--fg-neutral-t1-3-default); margin-left: 2px; }
 .stat-card .foot { display: flex; justify-content: space-between; align-items: center; margin-top: var(--space-2); }
+.stat-endpoint {
+  display: block; font-size: 12px; line-height: 18px; color: var(--fg-neutral-t1-2-default);
+  overflow-wrap: anywhere;
+}
 
 /* charts */
 .charts-grid { display: grid; grid-template-columns: 5fr 7fr; gap: var(--space-4); margin-bottom: var(--space-6); }

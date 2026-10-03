@@ -252,8 +252,8 @@ function menuAction(item) {
         <StatCard label="WORKER NODES" :value="String(nodeCount)" :unit="`of ${cpPlan?.maxNodes} plan max`">
           <span class="text-caption-1 muted">{{ cluster.pools.length }} node pool{{ cluster.pools.length === 1 ? '' : 's' }}</span>
         </StatCard>
-        <StatCard label="CPU" :value="String(cluster.usage.cpu) + '%'" badge="healthy" badge-tone="success">
-          <ArProgress :value="cluster.usage.cpu" />
+        <StatCard label="CONTROL PLANE API ENDPOINT">
+          <span class="stat-endpoint mono" :title="apiEndpoint(cluster)">{{ apiEndpoint(cluster) }}</span>
         </StatCard>
         <StatCard label="MEMORY" :value="String(cluster.usage.mem) + '%'" :badge="cluster.usage.mem >= 70 ? 'pressure' : 'healthy'" :badge-tone="cluster.usage.mem >= 70 ? 'warning' : 'success'">
           <ArProgress :value="cluster.usage.mem" />
@@ -273,7 +273,6 @@ function menuAction(item) {
             <span class="ar-badge success pill">etcd backup · {{ cluster.etcdBackup.restorePoints }} points</span>
           </div>
           <div class="kv">
-            <div class="row"><span class="k" style="width: 140px">API endpoint</span><span class="v mono" style="font-size: 12px">{{ apiEndpoint(cluster) }}</span></div>
             <div class="row"><span class="k" style="width: 140px">etcd backup</span><span class="v">Daily · last run {{ cluster.etcdBackup.lastRun }}</span></div>
             <div class="row"><span class="k" style="width: 140px">Kubernetes</span><span class="v">v{{ cluster.version }}</span></div>
           </div>
