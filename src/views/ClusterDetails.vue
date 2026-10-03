@@ -6,6 +6,7 @@ import { REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, VPCS, apiEndpoint, fmtDate,
 import ArButton from '../components/ui/ArButton.vue'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
+import DonutGauge from '../components/ui/DonutGauge.vue'
 import ArProgress from '../components/ui/ArProgress.vue'
 import ArEmpty from '../components/ui/ArEmpty.vue'
 import ActionMenu from '../components/ui/ActionMenu.vue'
@@ -30,6 +31,28 @@ const tabs = [
 ]
 
 /* ---------------- overview: master nodes table ---------------- */
+const monitorPanel = ref(false)
+const monitorNode = ref(null)
+
+function openMonitor(m) {
+  monitorNode.value = m
+  monitorPanel.value = true
+}
+
+/* deterministic mock metrics per node */
+function monitorMetrics(m) {
+  const seed = (m.name.length * 31 + m.az.length * 17) % 97
+  const pct = (v) => Math.round(v * 100) / 100
+  return {
+    cpuUsed: pct(2 + (seed % 18) / 10),
+    cpuLimit: m.cpu < 25 ? 4 : 8,
+    memUsed: pct(4 + (seed % 25) / 8),
+    memLimit: m.cpu < 25 ? 7.61 : 15.2,
+    uplink: pct(30 + (seed % 500) / 10),
+    downlink: pct(20 + (seed % 380) / 10),
+  }
+}
+
 const masterNodes = computed(() => {
   const ha = cluster.value?.cp.ha
   const zones = REGION.zones
@@ -306,7 +329,7 @@ function menuAction(item) {
                   <td class="text-body-2 muted">{{ m.az }}</td>
                   <td><ArProgress :value="m.cpu" :label="m.cpu.toFixed(2) + ' %'" /></td>
                   <td><ArProgress :value="m.mem" :label="m.mem.toFixed(2) + ' %'" /></td>
-                  <td><a href="#" @click.prevent="store.toast('info', 'Monitoring', `${m.name} metrics open in Monitoring.`)">Monitor</a></td>
+                  <td><a href="#" @click.prevent="openMonitor(m)">Monitor</a></td>
                 </tr>
                 <tr v-if="!masterNodes.length">
                   <td colspan="6" class="text-body-2-strong" style="text-align: center; padding: var(--space-8)">No data available.</td>
@@ -594,6 +617,78 @@ function menuAction(item) {
         </p>
       </div>
     </template>
+
+    <!-- ================= NODE MONITORING PANEL ================= -->
+    <ArSidePanel :open="monitorPanel" :title="`Node Monitoring ${monitorNode?.name || ''}`" :subtitle="`${cluster?.name} · ${monitorNode?.az || ''}`" @close="monitorPanel = false">
+      <div class="banner info" style="align-items: flex-start">
+        <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
+        <span>Monitoring data is collected by the platform metrics agent. Data missing at any time point indicates that no data was reported.</span>
+      </div>
+
+      <div v-if="monitorNode">
+        <h3 class="text-title-3" style="margin: 0 0 var(--space-4)">Monitoring Overview</h3>
+        <div class="charts-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 0">
+          <!-- CPU gauge -->
+          <div class="ar-card" style="padding: var(--space-5)">
+            <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">CPU Usage</h4>
+            <div class="gauge-pair">
+              <div><div class="gauge-num">{{ monitorMetrics(monitorNode).cpuUsed }}</div><div class="text-caption-1 muted">cores · Available</div></div>
+              <div><div class="gauge-num">{{ monitorMetrics(monitorNode).cpuLimit }}</div><div class="text-caption-1 muted">cores · Limit</div></div>
+            </div>
+            <DonutGauge :pct="monitorNode.cpu" label="CPU Usage" />
+          </div>
+          <!-- Memory gauge -->
+          <div class="ar-card" style="padding: var(--space-5)">
+            <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Physical Memory Usage</h4>
+            <div class="gauge-pair">
+              <div><div class="gauge-num">{{ monitorMetrics(monitorNode).memUsed }}</div><div class="text-caption-1 muted">GiB · Available</div></div>
+              <div><div class="gauge-num">{{ monitorMetrics(monitorNode).memLimit }}</div><div class="text-caption-1 muted">GiB · Limit</div></div>
+            </div>
+            <DonutGauge :pct="monitorNode.mem" label="Physical Memory Usage" />
+          </div>
+          <!-- Uplink / Downlink -->
+          <div class="ar-card" style="padding: var(--space-5)">
+            <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Uplink Rate (BPS)</h4>
+            <div class="gauge-num big">{{ monitorMetrics(monitorNode).uplink }} <span class="text-caption-1 muted">KB/s</span></div>
+          </div>
+          <div class="ar-card" style="padding: var(--space-5)">
+            <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Downlink Rate (BPS)</h4>
+            <div class="gauge-num big">{{ monitorMetrics(monitorNode).downlink }} <span class="text-caption-1 muted">KB/s</span></div>
+          </div>
+        </div>
+
+        <h3 class="text-title-3" style="margin: var(--space-6) 0 var(--space-4)">Monitoring Details</h3>
+        <div class="details-accordions">
+          <details>
+            <summary>CPU Metrics</summary>
+            <div class="acc-body">
+              <div class="kv">
+                <div class="row"><span class="k" style="width: 180px">CPU usage (cores)</span><span class="v">{{ monitorMetrics(monitorNode).cpuUsed }} / {{ monitorMetrics(monitorNode).cpuLimit }}</span></div>
+                <div class="row"><span class="k" style="width: 180px">CPU utilization</span><span class="v">{{ monitorNode.cpu }} %</span></div>
+              </div>
+            </div>
+          </details>
+          <details>
+            <summary>Memory Metrics</summary>
+            <div class="acc-body">
+              <div class="kv">
+                <div class="row"><span class="k" style="width: 180px">Memory usage (GiB)</span><span class="v">{{ monitorMetrics(monitorNode).memUsed }} / {{ monitorMetrics(monitorNode).memLimit }}</span></div>
+                <div class="row"><span class="k" style="width: 180px">Memory utilization</span><span class="v">{{ monitorNode.mem }} %</span></div>
+              </div>
+            </div>
+          </details>
+          <details>
+            <summary>Networking Metrics</summary>
+            <div class="acc-body">
+              <div class="kv">
+                <div class="row"><span class="k" style="width: 180px">Uplink rate</span><span class="v">{{ monitorMetrics(monitorNode).uplink }} KB/s</span></div>
+                <div class="row"><span class="k" style="width: 180px">Downlink rate</span><span class="v">{{ monitorMetrics(monitorNode).downlink }} KB/s</span></div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </ArSidePanel>
 
     <!-- ================= ADD NODE POOL ================= -->
     <ArSidePanel :open="showAddPool" title="Add node pool" :subtitle="cluster.name" @close="showAddPool = false">
