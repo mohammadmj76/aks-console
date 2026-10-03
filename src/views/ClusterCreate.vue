@@ -81,13 +81,6 @@ function toggleSubnet(id) {
   i >= 0 ? draft.subnetIds.splice(i, 1) : draft.subnetIds.push(id)
 }
 
-function addCidr(list) {
-  const last = list[list.length - 1]
-  list.push({ octets: [...last.octets], prefix: last.prefix })
-}
-function removeCidr(list, i) {
-  if (list.length > 1) list.splice(i, 1)
-}
 function octetInput(e, row, i) {
   const v = e.target.value.replace(/[^\d]/g, '').slice(0, 3)
   row.octets[i] = v
@@ -421,12 +414,6 @@ function create() {
                     aria-label="Prefix"
                   />
                 </div>
-                <button class="cidr-btn" :disabled="draft.podCidrs.length <= 1" @click="removeCidr(draft.podCidrs, i)" aria-label="Remove CIDR">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 4h10M5.5 4V3h5v1M4.5 4l.7 9h5.6l.7-9"/></svg>
-                </button>
-                <button v-if="i === draft.podCidrs.length - 1" class="cidr-btn" @click="addCidr(draft.podCidrs)" aria-label="Add CIDR">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
-                </button>
               </div>
               <p class="text-caption-1 muted" style="margin: var(--space-1) 0 0">
                 The container CIDR block is the IP address range for Kubernetes Pods. The current CIDR block supports a maximum of
@@ -468,12 +455,6 @@ function create() {
                     aria-label="Prefix"
                   />
                 </div>
-                <button class="cidr-btn" :disabled="draft.svcCidrs.length <= 1" @click="removeCidr(draft.svcCidrs, i)" aria-label="Remove CIDR">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 4h10M5.5 4V3h5v1M4.5 4l.7 9h5.6l.7-9"/></svg>
-                </button>
-                <button v-if="i === draft.svcCidrs.length - 1" class="cidr-btn" @click="addCidr(draft.svcCidrs)" aria-label="Add CIDR">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
-                </button>
               </div>
               <p class="text-caption-1 muted" style="margin: var(--space-1) 0 0">
                 The service CIDR block is the IP address range for Kubernetes ClusterIP Services. The current CIDR block supports a maximum of
