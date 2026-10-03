@@ -18,7 +18,6 @@ const router = useRouter()
 
 const cluster = computed(() => store.getCluster(route.params.id))
 const vpc = computed(() => VPCS.find((v) => v.id === cluster.value?.vpcId))
-const events = computed(() => store.events[cluster.value?.id] || [])
 const cpPlan = computed(() => CP_PLANS.find((p) => p.id === cluster.value?.cp.plan))
 const nodeCount = computed(() => cluster.value?.pools.reduce((n, p) => n + p.count, 0) || 0)
 
@@ -309,25 +308,6 @@ function menuAction(item) {
             :max="100"
           />
         </div>
-      </div>
-
-      <div class="ar-card" style="padding: var(--space-6)">
-        <h3 class="text-title-3" style="margin: 0 0 var(--space-4)">Recent events</h3>
-        <table class="ar-table">
-          <thead>
-            <tr><th style="width: 90px">Time</th><th style="width: 90px">Type</th><th style="width: 200px">Reason</th><th>Message</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="(e, i) in events.slice(0, 6)" :key="i">
-              <td class="mono muted">{{ e.ts }}</td>
-              <td>
-                <span class="ar-badge" :class="e.type === 'Warning' ? 'warning' : 'success'">{{ e.type }}</span>
-              </td>
-              <td class="text-body-2-strong">{{ e.reason }}</td>
-              <td class="text-body-2 muted">{{ e.msg }}</td>
-            </tr>
-          </tbody>
-        </table>
       </div>
     </template>
 
