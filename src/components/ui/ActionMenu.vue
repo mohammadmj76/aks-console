@@ -1,3 +1,8 @@
+<script>
+/* module-level registry: only one ActionMenu open across ALL instances */
+let closeActiveMenu = null
+</script>
+
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
@@ -23,12 +28,22 @@ function place() {
   }
 }
 function toggle() {
-  open.value = !open.value
-  if (open.value) nextTick(place)
+  if (!open.value) {
+    closeActiveMenu?.()
+    open.value = true
+    closeActiveMenu = () => { open.value = false }
+    nextTick(place)
+  } else {
+    open.value = false
+    closeActiveMenu = null
+  }
 }
 function onDocClick(e) {
   if (root.value?.contains(e.target) || pop.value?.contains(e.target)) return
-  open.value = false
+  if (open.value) {
+    open.value = false
+    closeActiveMenu = null
+  }
 }
 function onReposition() {
   if (open.value) place()
@@ -47,8 +62,12 @@ onBeforeUnmount(() => {
 function pick(item) {
   if (item.disabled) return
   open.value = false
+  closeActiveMenu = null
   emit('select', item)
 }
+onBeforeUnmount(() => {
+  if (closeActiveMenu && open.value) closeActiveMenu = null
+})
 </script>
 
 <template>
