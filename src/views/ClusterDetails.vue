@@ -263,21 +263,7 @@ function menuAction(item) {
         </StatCard>
       </div>
 
-      <div class="charts-grid">
-        <div class="ar-card chart-card">
-          <div class="head">
-            <div>
-              <h3 class="text-title-3" style="margin: 0">Control plane</h3>
-              <p class="text-caption-1 muted" style="margin: 2px 0 0">{{ cpPlan?.name }} · {{ cluster.cp.ha ? '3 nodes across ' + REGION.zones.map((z) => z.name).join(' / ') : 'single node' }}</p>
-            </div>
-            <span class="ar-badge success pill">etcd backup · {{ cluster.etcdBackup.restorePoints }} points</span>
-          </div>
-          <div class="kv">
-            <div class="row"><span class="k" style="width: 140px">etcd backup</span><span class="v">Daily · last run {{ cluster.etcdBackup.lastRun }}</span></div>
-            <div class="row"><span class="k" style="width: 140px">Kubernetes</span><span class="v">v{{ cluster.version }}</span></div>
-          </div>
-        </div>
-
+      <div class="charts-grid" style="grid-template-columns: 1fr">
         <div class="ar-card chart-card" style="padding: var(--space-6)">
           <div class="head">
             <div>
