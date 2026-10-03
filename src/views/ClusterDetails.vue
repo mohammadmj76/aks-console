@@ -165,13 +165,22 @@ function doUpgrade() {
   upgradeOpen.value = false
 }
 
-/* copy endpoint */
+/* copy endpoint — clipboard API with execCommand fallback */
 async function copy(text) {
   try {
     await navigator.clipboard.writeText(text)
     store.toast('success', 'Copied', 'Endpoint copied to clipboard.')
   } catch {
-    store.toast('info', 'Copy failed', 'Copy the endpoint manually.')
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    ta.remove()
+    if (ok) store.toast('success', 'Copied', 'Endpoint copied to clipboard.')
+    else store.toast('info', 'Copy failed', 'Copy the endpoint manually.')
   }
 }
 
@@ -253,7 +262,12 @@ function menuAction(item) {
           <span class="text-caption-1 muted">{{ cluster.pools.length }} node pool{{ cluster.pools.length === 1 ? '' : 's' }}</span>
         </StatCard>
         <StatCard label="CONTROL PLANE API ENDPOINT">
-          <span class="stat-endpoint mono" :title="apiEndpoint(cluster)">{{ apiEndpoint(cluster) }}</span>
+          <div class="stat-endpoint-row">
+            <span class="stat-endpoint mono" :title="apiEndpoint(cluster)">{{ apiEndpoint(cluster) }}</span>
+            <button class="ar-btn ghost icon sm" title="Copy endpoint" aria-label="Copy endpoint" @click="copy(apiEndpoint(cluster))">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>
+            </button>
+          </div>
         </StatCard>
         <StatCard label="MEMORY" :value="String(cluster.usage.mem) + '%'" :badge="cluster.usage.mem >= 70 ? 'pressure' : 'healthy'" :badge-tone="cluster.usage.mem >= 70 ? 'warning' : 'success'">
           <ArProgress :value="cluster.usage.mem" />

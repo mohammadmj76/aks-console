@@ -118,6 +118,9 @@
   display: block; font-size: 12px; line-height: 18px; color: var(--fg-neutral-t1-2-default);
   overflow-wrap: anywhere;
 }
+.stat-endpoint-row { display: flex; align-items: flex-start; gap: var(--space-2); }
+.stat-endpoint-row .stat-endpoint { flex: 1; }
+.stat-endpoint-row .ar-btn { margin-left: auto; flex: none; }
 
 /* charts */
 .charts-grid { display: grid; grid-template-columns: 5fr 7fr; gap: var(--space-4); margin-bottom: var(--space-6); }
