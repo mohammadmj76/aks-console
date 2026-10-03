@@ -10,7 +10,6 @@ import ArProgress from '../components/ui/ArProgress.vue'
 import ArEmpty from '../components/ui/ArEmpty.vue'
 import ActionMenu from '../components/ui/ActionMenu.vue'
 import StatCard from '../components/ui/StatCard.vue'
-import AreaChart from '../components/ui/AreaChart.vue'
 import ClusterStatus from '../components/ClusterStatus.vue'
 
 const route = useRoute()
@@ -29,6 +28,24 @@ const tabs = [
   { id: 'operations', label: 'Operations' },
   { id: 'events', label: 'Events' },
 ]
+
+/* ---------------- overview: master nodes table ---------------- */
+const masterQuery = ref('')
+const masterNodes = computed(() => {
+  const ha = cluster.value?.cp.ha
+  const zones = REGION.zones
+  const count = ha ? 3 : 1
+  const seed = cluster.value?.id.length || 7
+  const base = Array.from({ length: count }, (_, i) => ({
+    name: `${cluster.value?.name || 'cluster'}-master-${count - i}`,
+    status: cluster.value?.status === 'error' && i === 0 ? 'Unreachable' : 'Running',
+    az: ha ? zones[i % zones.length].name : zones[0].name,
+    cpu: Math.round(((cluster.value?.usage.cpu || 18) * (0.55 + ((seed * 7 + i * 13) % 30) / 100)) * 100) / 100,
+    mem: Math.round(((cluster.value?.usage.mem || 22) * (0.38 + ((seed * 5 + i * 17) % 26) / 100)) * 100) / 100,
+  }))
+  const q = masterQuery.value.trim().toLowerCase()
+  return base.filter((m) => !q || m.name.toLowerCase().includes(q) || m.az.toLowerCase().includes(q) || m.status.toLowerCase().includes(q))
+})
 
 /* ---------------- events tab ---------------- */
 const evTab = ref('om')
@@ -90,31 +107,6 @@ function exportExcel() {
   URL.revokeObjectURL(a.href)
   store.toast('success', 'Export ready', `${a.download} downloaded (Excel-compatible CSV).`)
 }
-
-/* fake 24h usage series seeded per cluster */
-function seedSeries(base, spread) {
-  const out = []
-  let v = base
-  for (let i = 0; i < 24; i++) {
-    v = Math.max(4, Math.min(96, v + (Math.sin(i * 1.7 + base) * spread + (Math.random() - 0.45) * spread)))
-    out.push(Math.round(v))
-  }
-  return out
-}
-const chart = reactive({
-  labels: ['00', '03', '06', '09', '12', '15', '18', '21'].map((h, i) => h + ':00'),
-  cpu: [],
-  mem: [],
-})
-function reseed() {
-  if (!cluster.value) return
-  const u = cluster.value.usage
-  chart.cpu = seedSeries(u.cpu, 9)
-  chart.mem = seedSeries(u.mem, 5)
-}
-reseed()
-watch(cluster, reseed)
-import { watch } from 'vue'
 
 /* per-node mock rows */
 function poolFlavorIds(pool) {
@@ -287,26 +279,54 @@ function menuAction(item) {
           </div>
         </div>
 
-        <div class="ar-card chart-card">
+        <div class="ar-card chart-card" style="padding: var(--space-6)">
           <div class="head">
             <div>
-              <h3 class="text-title-3" style="margin: 0">Resource usage</h3>
-              <p class="text-caption-1 muted" style="margin: 2px 0 0">Last 24 hours · cluster-wide</p>
-            </div>
-            <div class="legend" style="flex-direction: row; margin: 0; gap: var(--space-4)">
-              <span class="row" style="border: 0; padding: 0"><span class="swatch" style="background: var(--bg-primary-t1-1-default)"></span>CPU</span>
-              <span class="row" style="border: 0; padding: 0"><span class="swatch" style="background: var(--bg-info-t1-1-default)"></span>Memory</span>
+              <h3 class="text-title-3" style="margin: 0">Master Nodes</h3>
             </div>
           </div>
-          <AreaChart
-            v-if="chart.cpu.length"
-            :series="[
-              { values: chart.cpu, color: 'var(--bg-primary-t1-1-default)' },
-              { values: chart.mem, color: 'var(--bg-info-t1-1-default)' },
-            ]"
-            :labels="chart.labels"
-            :max="100"
-          />
+          <div class="banner info" style="margin-bottom: var(--space-4); align-items: flex-start">
+            <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
+            <span>Overload control enabled. An overloaded master node rejects external traffic proportionally based on the overload level.</span>
+          </div>
+          <div style="display: flex; gap: var(--space-3); margin-bottom: var(--space-4)">
+            <label class="ar-input" style="flex: 1; height: 34px">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+              <input v-model="masterQuery" type="search" placeholder="Select a property or enter a keyword." />
+            </label>
+            <button class="ar-btn secondary sm" title="Refresh" @click="store.toast('info', 'Refreshed', 'Master node metrics reloaded.')">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 8a6 6 0 1 1-1.76-4.24"/><path d="M14 2.8V6h-3.2"/></svg>
+            </button>
+          </div>
+          <div class="table-scroll">
+            <table class="ar-table">
+              <thead>
+                <tr>
+                  <th>Name <span class="sort-ico">⇅</span></th>
+                  <th style="width: 130px">Status</th>
+                  <th style="width: 90px">AZ</th>
+                  <th style="width: 200px">CPU Usage</th>
+                  <th style="width: 200px">Memory Usage</th>
+                  <th style="width: 90px"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="m in masterNodes" :key="m.name">
+                  <td class="cell-main">{{ m.name }}</td>
+                  <td>
+                    <span class="ar-tag" :class="m.status === 'Running' ? 'success' : 'error'"><span class="dot"></span>{{ m.status }}</span>
+                  </td>
+                  <td class="text-body-2 muted">{{ m.az }}</td>
+                  <td><ArProgress :value="m.cpu" :label="m.cpu.toFixed(2) + ' %'" /></td>
+                  <td><ArProgress :value="m.mem" :label="m.mem.toFixed(2) + ' %'" /></td>
+                  <td><a href="#" @click.prevent="store.toast('info', 'Monitoring', `${m.name} metrics open in Monitoring.`)">Monitor</a></td>
+                </tr>
+                <tr v-if="!masterNodes.length">
+                  <td colspan="6" class="text-body-2-strong" style="text-align: center; padding: var(--space-8)">No data available.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </template>
