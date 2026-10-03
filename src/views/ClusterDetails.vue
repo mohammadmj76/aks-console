@@ -30,21 +30,18 @@ const tabs = [
 ]
 
 /* ---------------- overview: master nodes table ---------------- */
-const masterQuery = ref('')
 const masterNodes = computed(() => {
   const ha = cluster.value?.cp.ha
   const zones = REGION.zones
   const count = ha ? 3 : 1
   const seed = cluster.value?.id.length || 7
-  const base = Array.from({ length: count }, (_, i) => ({
+  return Array.from({ length: count }, (_, i) => ({
     name: `${cluster.value?.name || 'cluster'}-master-${count - i}`,
     status: cluster.value?.status === 'error' && i === 0 ? 'Unreachable' : 'Running',
     az: ha ? zones[i % zones.length].name : zones[0].name,
     cpu: Math.round(((cluster.value?.usage.cpu || 18) * (0.55 + ((seed * 7 + i * 13) % 30) / 100)) * 100) / 100,
     mem: Math.round(((cluster.value?.usage.mem || 22) * (0.38 + ((seed * 5 + i * 17) % 26) / 100)) * 100) / 100,
   }))
-  const q = masterQuery.value.trim().toLowerCase()
-  return base.filter((m) => !q || m.name.toLowerCase().includes(q) || m.az.toLowerCase().includes(q) || m.status.toLowerCase().includes(q))
 })
 
 /* ---------------- events tab ---------------- */
@@ -287,15 +284,6 @@ function menuAction(item) {
           <div class="banner info" style="margin-bottom: var(--space-4); align-items: flex-start">
             <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
             <span>Overload control enabled. An overloaded master node rejects external traffic proportionally based on the overload level.</span>
-          </div>
-          <div style="display: flex; gap: var(--space-3); margin-bottom: var(--space-4)">
-            <label class="ar-input" style="flex: 1; height: 34px">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
-              <input v-model="masterQuery" type="search" placeholder="Select a property or enter a keyword." />
-            </label>
-            <button class="ar-btn secondary sm" title="Refresh" @click="store.toast('info', 'Refreshed', 'Master node metrics reloaded.')">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 8a6 6 0 1 1-1.76-4.24"/><path d="M14 2.8V6h-3.2"/></svg>
-            </button>
           </div>
           <div class="table-scroll">
             <table class="ar-table">
