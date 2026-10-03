@@ -25,7 +25,7 @@ const draft = reactive({
   subnetIds: [],
   podCidrs: [{ octets: ['192', '168', '0', '0'], prefix: '16' }],
   svcCidrs: [{ octets: ['10', '10', '0', '0'], prefix: '24' }],
-  pool: { name: '', count: 2 },
+  pool: { name: '' },
   specs: [], // [{ flavorId, zones: [] }]
 })
 /* ---------------- computed ---------------- */
@@ -45,7 +45,7 @@ const canCreate = computed(
 const price = computed(() =>
   monthlyPrice({
     cp: { plan: draft.cp.plan },
-    pool: draft.specs.length ? { count: draft.pool.count, specs: draft.specs } : null,
+    pool: draft.specs.length ? { count: draft.specs.length, specs: draft.specs } : null,
   })
 )
 
@@ -190,7 +190,7 @@ function create() {
       podCidr: cidrStr(draft.podCidrs[0]),
       svcCidr: cidrStr(draft.svcCidrs[0]),
       pool: draft.specs.length
-        ? { name: draft.pool.name || 'node-pool-1', count: draft.pool.count, specs: JSON.parse(JSON.stringify(draft.specs)) }
+        ? { name: draft.pool.name || 'node-pool-1', count: draft.specs.length, specs: JSON.parse(JSON.stringify(draft.specs)) }
         : null,
     })
     creating.value = false
@@ -503,14 +503,6 @@ function create() {
                 </div>
                 <span v-if="draft.pool.name && !poolNameOk" class="error-text">Lowercase letters, digits and dashes. 3–40 characters.</span>
               </div>
-              <div class="ar-field" v-if="draft.specs.length" style="width: 180px">
-                <label>Nodes</label>
-                <div class="count-input">
-                  <button :disabled="draft.pool.count <= 1" @click="draft.pool.count--">−</button>
-                  <input v-model.number="draft.pool.count" type="number" min="1" max="20" />
-                  <button :disabled="draft.pool.count >= 20" @click="draft.pool.count++">+</button>
-                </div>
-              </div>
             </div>
 
             <!-- flavor filters -->
@@ -764,7 +756,6 @@ function create() {
             <div class="rail-text">
               <p>Pool Name: {{ draft.pool.name || (draft.specs.length ? 'node-pool-1' : '—') }}</p>
               <p>Flavors: {{ draft.specs.length ? draft.specs.map((s) => s.flavorId).join(', ') : '—' }}</p>
-              <p v-if="draft.specs.length">Nodes: {{ draft.pool.count }}</p>
               <p v-if="draft.specs.length">Availability Zone: {{ [...new Set(draft.specs.flatMap((s) => s.zones))].map(zoneName).join(', ') || '—' }}</p>
             </div>
           </div>
