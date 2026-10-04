@@ -195,7 +195,7 @@
 .dist-rows { display: flex; flex-direction: column; gap: var(--space-4); }
 .dist-row { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
 .dist-k { flex: none; font-size: 13.5px; color: var(--fg-neutral-t1-1-default); white-space: nowrap; }
-.dist-seg { min-width: 300px; }
+.dist-seg { width: fit-content; }
 .dist-radio {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 14px; color: var(--fg-neutral-t1-1-default); cursor: pointer; margin-right: var(--space-4);
