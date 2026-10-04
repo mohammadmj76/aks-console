@@ -333,10 +333,9 @@ function create() {
             <span class="ar-field-label">Master Distribution<span class="req">*</span></span>
             <div class="dist-rows">
               <div class="dist-row">
-                <span class="dist-k">Master Distribution</span>
                 <div class="seg dist-seg">
-                  <button :class="{ on: masterDist === 'automatic' }" @click="masterDist = 'automatic'">Automatic</button>
-                  <button :class="{ on: masterDist === 'custom' }" @click="masterDist = 'custom'">Custom</button>
+                  <button :class="{ on: masterDist === 'automatic' }" @click="masterDist = 'automatic'">Multi AZ</button>
+                  <button :class="{ on: masterDist === 'custom' }" @click="masterDist = 'custom'">Single AZ</button>
                 </div>
               </div>
 
@@ -807,7 +806,7 @@ function create() {
             <h4>Cluster Type and Version</h4>
             <div class="rail-text">
               <p>Cluster Type: {{ cpPlan?.name }}</p>
-              <p>Master Distribution: {{ masterDist === 'automatic' ? 'Automatic' : masterPolicy === 'host' ? `Host · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` : 'Custom AZ per node' }}</p>
+              <p>Master Distribution: {{ masterDist === 'automatic' ? 'Multi AZ' : masterPolicy === 'host' ? `Single AZ · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` : 'Single AZ · per-node AZ' }}</p>
               <p>Kubernetes Version: {{ VERSIONS.find((v) => v.id === draft.version)?.patch }}</p>
             </div>
           </div>
