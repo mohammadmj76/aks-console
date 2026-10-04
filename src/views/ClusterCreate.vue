@@ -152,11 +152,13 @@ const azCell = (f) =>
 const availableZones = (f) => f.azs.filter((z) => !z.soldOut).map((z) => z.id)
 const allZonesSoldOut = (f) => f.azs.every((z) => z.soldOut)
 
-/* selected specs (multi-select) */
+/* selected spec — single choice: picking a flavor replaces the previous one */
 function toggleFlavor(f) {
   const i = draft.specs.findIndex((s) => s.flavorId === f.id)
   if (i >= 0) draft.specs.splice(i, 1)
-  else draft.specs.push({ flavorId: f.id, zones: availableZones(f) })
+  else {
+    draft.specs = [{ flavorId: f.id, zones: availableZones(f) }]
+  }
 }
 function specToggleZone(spec, zoneId, f) {
   if (f.azs.find((z) => z.id === zoneId)?.soldOut) return
@@ -169,18 +171,7 @@ function removeSpec(spec) {
 function specSelected(f) {
   return draft.specs.some((s) => s.flavorId === f.id)
 }
-/* header checkbox: toggle all page rows */
-const pageAllSelected = computed(
-  () => pagedFlavors.value.length > 0 && pagedFlavors.value.every((f) => specSelected(f) || allZonesSoldOut(f))
-)
-function togglePageAll() {
-  const target = !pageAllSelected.value
-  for (const f of pagedFlavors.value) {
-    const has = specSelected(f)
-    if (target && !has && !allZonesSoldOut(f)) draft.specs.push({ flavorId: f.id, zones: availableZones(f) })
-    if (!target && has) removeSpec(draft.specs.find((s) => s.flavorId === f.id))
-  }
-}
+/* header cell: with single-select there is no select-all; keep the cell empty */
 
 /* ---------------- create ---------------- */
 const creating = ref(false)
@@ -601,7 +592,7 @@ function create() {
               <table class="ar-table flavor-table">
                 <thead>
                   <tr>
-                    <th style="width: 36px"><ArCheckbox :model-value="pageAllSelected" @update:model-value="togglePageAll" /></th>
+                    <th style="width: 36px"></th>
                     <th>Flavor</th>
                     <th>AZ</th>
                     <th>vCPUs / Memory</th>
@@ -670,15 +661,14 @@ function create() {
               </div>
             </div>
 
-            <!-- selected specifications -->
+            <!-- selected specification (single) -->
             <div v-if="draft.specs.length" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md); padding: var(--space-4) var(--space-6) var(--space-6)">
-              <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Selected Specifications</h4>
+              <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Selected Specification</h4>
               <div class="banner info" style="margin-bottom: var(--space-4); align-items: flex-start">
                 <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
                 <ol style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px">
-                  <li>Nodes in a newly created node pool are created using the first flavor with available capacity.</li>
-                  <li>When manually scaling a node pool, you can only add nodes using the selected flavors — select multiple flavors (spec and AZ) as alternatives.</li>
-                  <li>Choose the availability zones where the nodes of each flavor should be provisioned.</li>
+                  <li>Only one flavor can be selected per node pool — picking another flavor replaces the current one.</li>
+                  <li>Choose the availability zones where the nodes of this flavor should be provisioned.</li>
                 </ol>
               </div>
               <div class="table-scroll">
