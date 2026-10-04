@@ -26,9 +26,13 @@ const draft = reactive({
   subnetIds: [],
   podCidrs: [{ octets: ['192', '168', '0', '0'], prefix: '16' }],
   svcCidrs: [{ octets: ['10', '10', '0', '0'], prefix: '24' }],
-  pool: { name: '' },
+  pool: { name: '', image: 'ubuntu-22.04', loginMode: 'password', password: '', passwordConfirm: '' },
   specs: [], // [{ flavorId, zones: [] }]
 })
+
+/* ---------------- advanced settings (node pool) ---------------- */
+const advOpen = ref(false)
+const poolImageTab = ref('public')
 
 /* ---------------- master distribution ---------------- */
 const masterDist = ref('automatic')
@@ -56,8 +60,17 @@ const subnetOk = computed(() => {
 const cidrsOk = computed(() => isValidCidrs(draft.podCidrs) && isValidCidrs(draft.svcCidrs))
 const poolNameOk = computed(() => !draft.pool.name || /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(draft.pool.name))
 const specsOk = computed(() => draft.specs.every((s) => s.zones.length > 0))
+const IMAGES = [
+  { id: 'ubuntu-22.04', name: 'Ubuntu 22.04' },
+  { id: 'debian-12', name: 'Debian 12' },
+]
+const passwordOk = computed(
+  () =>
+    draft.pool.loginMode !== 'password' ||
+    (draft.pool.password.length >= 8 && draft.pool.password === draft.pool.passwordConfirm)
+)
 const canCreate = computed(
-  () => nameOk.value && subnetOk.value && cidrsOk.value && poolNameOk.value && specsOk.value && masterAzsOk.value
+  () => nameOk.value && subnetOk.value && cidrsOk.value && poolNameOk.value && specsOk.value && masterAzsOk.value && passwordOk.value
 )
 
 const price = computed(() =>
@@ -541,6 +554,70 @@ function create() {
                   <input v-model="draft.pool.name" placeholder="Enter a name" spellcheck="false" style="text-transform: lowercase" />
                 </div>
                 <span v-if="draft.pool.name && !poolNameOk" class="error-text">Lowercase letters, digits and dashes. 3–40 characters.</span>
+              </div>
+            </div>
+
+            <!-- advanced settings (optional) -->
+            <button class="adv-toggle" @click="advOpen = !advOpen">
+              Advanced Settings (Optional)
+              <svg class="chev" :style="{ transform: advOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 6.5 4 4 4-4"/></svg>
+            </button>
+
+            <div v-if="advOpen" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5)">
+              <!-- OS -->
+              <div class="dist-row" style="align-items: flex-start">
+                <span class="dist-k" style="margin-top: 6px">OS</span>
+                <div style="display: flex; flex-direction: column; gap: var(--space-3)">
+                  <div class="seg">
+                    <button :class="{ on: poolImageTab === 'public' }" @click="poolImageTab = 'public'">Public image</button>
+                    <button :class="{ on: poolImageTab === 'private' }" @click="poolImageTab = 'private'">Private image</button>
+                  </div>
+                  <div v-if="poolImageTab === 'public'" class="chip-row">
+                    <button
+                      v-for="img in IMAGES"
+                      :key="img.id"
+                      class="os-card"
+                      :class="{ on: draft.pool.image === img.id }"
+                      @click="draft.pool.image = img.id"
+                    >
+                      <span class="os-logo" :class="img.id.startsWith('ubuntu') ? 'os-ubuntu' : 'os-debian'">
+                        <svg v-if="img.id.startsWith('ubuntu')" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="7.5" cy="12" r="1.6"/><circle cx="14" cy="7.5" r="1.6"/><circle cx="14" cy="16.5" r="1.6"/></svg>
+                        <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a9 9 0 1 0 9 9c0-.6 0-1.2-.2-1.8A5 5 0 0 1 13 4.2 9 9 0 0 0 12 3Z"/><path d="M8 12.5c1.8 0 3.2-1.4 3.2-3.2"/></svg>
+                      </span>
+                      {{ img.name }}
+                    </button>
+                  </div>
+                  <p v-else class="scale-note muted">Private images are not available yet.</p>
+                </div>
+              </div>
+
+              <!-- Login mode -->
+              <div class="dist-row" style="align-items: flex-start">
+                <span class="dist-k" style="margin-top: 6px">Login Mode</span>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-3)">
+                  <div class="seg">
+                    <button :class="{ on: draft.pool.loginMode === 'password' }" @click="draft.pool.loginMode = 'password'">Password</button>
+                    <button :class="{ on: draft.pool.loginMode === 'keypair' }" @click="draft.pool.loginMode = 'keypair'">Key Pair</button>
+                  </div>
+                  <div v-if="draft.pool.loginMode === 'password'" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); max-width: 560px">
+                    <div class="dist-row" style="flex-wrap: nowrap">
+                      <span class="dist-k" style="width: 90px">Username</span>
+                      <span class="text-body-2-strong">root</span>
+                    </div>
+                    <div class="dist-row">
+                      <span class="dist-k" style="width: 90px">Password</span>
+                      <div class="ar-input" style="flex: 1" :class="{ 'error-mode': draft.pool.password && draft.pool.password.length < 8 }">
+                        <input v-model="draft.pool.password" type="password" placeholder="Enter a password." autocomplete="new-password" />
+                      </div>
+                      <div class="ar-input" style="flex: 1" :class="{ 'error-mode': draft.pool.passwordConfirm && draft.pool.passwordConfirm !== draft.pool.password }">
+                        <input v-model="draft.pool.passwordConfirm" type="password" placeholder="Confirm the password." autocomplete="new-password" />
+                      </div>
+                    </div>
+                    <span v-if="draft.pool.password && draft.pool.password.length < 8" class="error-text">Password must be at least 8 characters.</span>
+                    <span v-else-if="draft.pool.passwordConfirm && draft.pool.passwordConfirm !== draft.pool.password" class="error-text">Passwords do not match.</span>
+                  </div>
+                  <p v-else class="scale-note muted">Choose an SSH key pair from your project after the cluster is created.</p>
+                </div>
               </div>
             </div>
 

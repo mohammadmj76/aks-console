@@ -213,6 +213,30 @@
 .dist-az-select { width: 260px; }
 .warn-note { color: var(--fg-orange-t1-1-default); }
 
+/* advanced settings toggle (node pool) */
+.adv-toggle {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: var(--space-2);
+  border: 0; background: none; cursor: pointer; padding: 0;
+  font: inherit; font-size: 16px; font-weight: 450; letter-spacing: -0.32px;
+  color: var(--fg-neutral-t1-1-default);
+}
+.adv-toggle .chev { color: var(--fg-neutral-t1-2-default); }
+
+/* OS image cards */
+.os-card {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 14px 18px; min-width: 150px; justify-content: center;
+  background: var(--bg-neutral-t1-1-default);
+  border: 1px solid var(--st-neutral-t1-2-default); border-radius: var(--radius-md);
+  font: inherit; font-size: 14px; font-weight: 450; color: var(--fg-neutral-t1-1-default);
+  cursor: pointer; transition: all .15s;
+}
+.os-card:hover { border-color: var(--st-neutral-t1-5-default); }
+.os-card.on { border-color: var(--st-primary-t1-1-default); box-shadow: 0 0 0 1px var(--st-primary-t1-1-default); }
+.os-logo { display: inline-flex; color: var(--fg-neutral-t1-2-default); }
+.os-ubuntu { color: #d64541; }
+.os-debian { color: #b0084d; }
+
 @media (max-width: 1100px) {
   .wizard-grid { grid-template-columns: 1fr; }
   .wizard-rail { position: static; }
