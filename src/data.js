@@ -32,10 +32,10 @@ export const VERSIONS = [
 
 /* Cluster types — dedicated control-plane specs (price in IRR/day) */
 export const CP_PLANS = [
-  { id: 'xsmall',  name: 'xSmall', vcpu: 2,  ram: 8,  maxNodes: 50,   etcdSize: '4 GB',  pricePerDay: 1_800_000 },
-  { id: 'small',   name: 'Small',  vcpu: 4,  ram: 16, maxNodes: 100,  etcdSize: '8 GB',  pricePerDay: 3_600_000 },
-  { id: 'medium',  name: 'Medium', vcpu: 4,  ram: 32, maxNodes: 250,  etcdSize: '16 GB', pricePerDay: 7_200_000 },
-  { id: 'large',   name: 'Large',  vcpu: 8,  ram: 32, maxNodes: 500,  etcdSize: '32 GB', pricePerDay: 14_400_000 },
+  { id: 'xsmall',  name: 'xSmall', vcpu: 2,  ram: 8,  replicas: 3, maxNodes: 50,   etcdSize: '4 GB',  pricePerDay: 1_800_000 },
+  { id: 'small',   name: 'Small',  vcpu: 4,  ram: 16, replicas: 3, maxNodes: 100,  etcdSize: '8 GB',  pricePerDay: 3_600_000 },
+  { id: 'medium',  name: 'Medium', vcpu: 4,  ram: 32, replicas: 5, maxNodes: 250,  etcdSize: '16 GB', pricePerDay: 7_200_000 },
+  { id: 'large',   name: 'Large',  vcpu: 8,  ram: 32, replicas: 5, maxNodes: 500,  etcdSize: '32 GB', pricePerDay: 14_400_000 },
 ]
 
 /* ---------- flavor catalog (worker nodes) ---------- */

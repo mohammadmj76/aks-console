@@ -297,7 +297,7 @@ function create() {
             >
               <span class="radio"></span>
               <div class="t-name">{{ p.name }}</div>
-              <div class="t-spec"><span class="ts-k">Memory</span><span class="ts-v">{{ p.ram }} GB</span></div>
+              <div class="t-spec"><span class="ts-k">Replica</span><span class="ts-v">{{ p.replicas }}</span></div>
               <div class="t-spec"><span class="ts-k">Max Nodes</span><span class="ts-v">{{ p.maxNodes }}</span></div>
               <div class="t-spec"><span class="ts-k">Max etcd Size</span><span class="ts-v">{{ p.etcdSize }}</span></div>
               <div class="t-spec t-price"><span class="ts-k">Price</span><span class="ts-v">{{ fmtIRR(p.pricePerDay) }} IRR/Day</span></div>
@@ -307,7 +307,7 @@ function create() {
           <div v-else-if="typeView === 'table'" class="table-scroll">
             <table class="ar-table" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md)">
               <thead>
-                <tr><th></th><th>Type</th><th>Memory</th><th>Max Nodes</th><th>Max etcd Size</th><th>Price</th></tr>
+                <tr><th></th><th>Type</th><th>Replica</th><th>Max Nodes</th><th>Max etcd Size</th><th>Price</th></tr>
               </thead>
               <tbody>
                 <tr
@@ -319,7 +319,7 @@ function create() {
                 >
                   <td style="width: 36px"><span class="radio-box" :class="{ on: draft.cp.plan === p.id }"></span></td>
                   <td class="cell-main">{{ p.name }}</td>
-                  <td class="text-body-2">{{ p.ram }} GB</td>
+                  <td class="text-body-2">{{ p.replicas }}</td>
                   <td class="text-body-2">{{ p.maxNodes }}</td>
                   <td class="text-body-2">{{ p.etcdSize }}</td>
                   <td class="text-body-2">{{ fmtIRR(p.pricePerDay) }} IRR/Day</td>
