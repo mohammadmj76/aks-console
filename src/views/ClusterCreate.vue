@@ -31,16 +31,8 @@ const draft = reactive({
 
 /* ---------------- master distribution ---------------- */
 const masterDist = ref('automatic')
-const masterPolicy = ref('host')
 const masterHostAz = ref('foroogh')
-const masterAzs = reactive(['', '', ''])
-const masterAzsOk = computed(() =>
-  masterDist.value === 'automatic' ||
-  (masterPolicy.value === 'host'
-    ? masterHostAz.value !== ''
-    : masterAzs.every((a) => a !== ''))
-)
-watch(masterDist, () => { masterPolicy.value = 'host' })
+const masterAzsOk = computed(() => masterDist.value === 'automatic' || masterHostAz.value !== '')
 
 /* ---------------- computed ---------------- */
 const region = computed(() => REGIONS.find((r) => r.id === regionId.value))
@@ -341,54 +333,26 @@ function create() {
 
               <template v-if="masterDist === 'custom'">
                 <div class="dist-row">
-                  <span class="dist-k">Policy</span>
-                  <div class="seg dist-seg">
-                    <button :class="{ on: masterPolicy === 'host' }" @click="masterPolicy = 'host'">Host</button>
-                    <button :class="{ on: masterPolicy === 'custom' }" @click="masterPolicy = 'custom'">Custom</button>
-                  </div>
+                  <span class="dist-k">Select AZ</span>
+                  <label class="dist-radio">
+                    <span class="radio-dot" :class="{ on: masterHostAz === 'foroogh' }"></span>
+                    <input type="radio" name="master-host-az" value="foroogh" v-model="masterHostAz" /> Forough
+                  </label>
+                  <label class="dist-radio">
+                    <span class="radio-dot" :class="{ on: masterHostAz === 'bamdad' }"></span>
+                    <input type="radio" name="master-host-az" value="bamdad" v-model="masterHostAz" /> Bamdad
+                  </label>
+                  <label class="dist-radio">
+                    <span class="radio-dot" :class="{ on: masterHostAz === 'simin' }"></span>
+                    <input type="radio" name="master-host-az" value="simin" v-model="masterHostAz" /> Simin
+                  </label>
                 </div>
-
-                <template v-if="masterPolicy === 'host'">
-                  <div class="dist-row">
-                    <span class="dist-k">Select AZ</span>
-                    <label class="dist-radio">
-                      <span class="radio-box" :class="{ on: masterHostAz === 'foroogh' }"></span>
-                      <input type="radio" name="master-host-az" value="foroogh" v-model="masterHostAz" /> Forough
-                    </label>
-                    <label class="dist-radio">
-                      <span class="radio-box" :class="{ on: masterHostAz === 'bamdad' }"></span>
-                      <input type="radio" name="master-host-az" value="bamdad" v-model="masterHostAz" /> Bamdad
-                    </label>
-                    <label class="dist-radio">
-                      <span class="radio-box" :class="{ on: masterHostAz === 'simin' }"></span>
-                      <input type="radio" name="master-host-az" value="simin" v-model="masterHostAz" /> Simin
-                    </label>
-                  </div>
-                  <p class="scale-note">
-                    After you customize AZ for your cluster's master nodes, the platform will create the master nodes based on the node distribution policy.
-                  </p>
-                  <p class="scale-note warn-note">
-                    Insufficient resources in the specified AZ may cause the master node creation to fail, affecting the overall cluster creation process.
-                  </p>
-                </template>
-
-                <template v-else>
-                  <div v-for="n in 3" :key="n" class="dist-row">
-                    <span class="dist-k">Master Node{{ n }}</span>
-                    <ArSelectMenu
-                      class="dist-az-select"
-                      v-model="masterAzs[n - 1]"
-                      :options="[{ value: '', label: 'Select an AZ.' }, ...REGION.zones.map((z) => ({ value: z.id, label: z.name }))]"
-                      :aria-label="`Master Node ${n} AZ`"
-                    />
-                  </div>
-                  <p class="scale-note">
-                    After you customize AZ for your cluster's master nodes, the platform will create the master nodes based on the node distribution policy.
-                  </p>
-                  <p class="scale-note warn-note">
-                    Insufficient resources in the specified AZ may cause the master node creation to fail, affecting the overall cluster creation process.
-                  </p>
-                </template>
+                <p class="scale-note">
+                  After you customize AZ for your cluster's master nodes, the platform will create the master nodes based on the node distribution policy.
+                </p>
+                <p class="scale-note warn-note">
+                  Insufficient resources in the specified AZ may cause the master node creation to fail, affecting the overall cluster creation process.
+                </p>
               </template>
 
               <template v-else>
@@ -806,7 +770,7 @@ function create() {
             <h4>Cluster Type and Version</h4>
             <div class="rail-text">
               <p>Cluster Type: {{ cpPlan?.name }}</p>
-              <p>Master Distribution: {{ masterDist === 'automatic' ? 'Multi AZ' : masterPolicy === 'host' ? `Single AZ · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` : 'Single AZ · per-node AZ' }}</p>
+              <p>Master Distribution: {{ masterDist === 'automatic' ? 'Multi AZ' : `Single AZ · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` }}</p>
               <p>Kubernetes Version: {{ VERSIONS.find((v) => v.id === draft.version)?.patch }}</p>
             </div>
           </div>
