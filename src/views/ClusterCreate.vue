@@ -40,7 +40,18 @@ const vpc = computed(() => VPCS.find((v) => v.id === draft.vpcId))
 const cpPlan = computed(() => CP_PLANS.find((p) => p.id === draft.cp.plan))
 
 const nameOk = computed(() => /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(draft.name))
-const subnetOk = computed(() => draft.subnetIds.length > 0)
+/* Multi AZ requires at least one subnet per availability zone */
+const selectedSubnetZones = computed(() =>
+  [...new Set(draft.subnetIds.map((id) => vpc.value?.subnets.find((s) => s.id === id)?.zone).filter(Boolean))]
+)
+const missingAzSubnets = computed(() =>
+  REGION.zones.map((z) => z.id).filter((z) => !selectedSubnetZones.value.includes(z))
+)
+const subnetOk = computed(() => {
+  if (!draft.subnetIds.length) return false
+  if (masterDist.value !== 'automatic') return true
+  return missingAzSubnets.value.length === 0
+})
 const cidrsOk = computed(() => isValidCidrs(draft.podCidrs) && isValidCidrs(draft.svcCidrs))
 const poolNameOk = computed(() => !draft.pool.name || /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(draft.pool.name))
 const specsOk = computed(() => draft.specs.every((s) => s.zones.length > 0))
@@ -433,6 +444,9 @@ function create() {
                   </table>
                 </div>
                 <span class="hint">Pick one subnet per availability zone you want worker nodes in.</span>
+                <span v-if="masterDist === 'automatic' && vpc && missingAzSubnets.length" class="error-text">
+                  Multi AZ requires a subnet in every availability zone — missing: {{ missingAzSubnets.map((z) => REGION.zones.find((zz) => zz.id === z)?.name).join(', ') }}.
+                </span>
               </div>
             </div>
           </div>
