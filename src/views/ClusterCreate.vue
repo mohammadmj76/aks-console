@@ -610,7 +610,7 @@ function create() {
                     <th>Flavor</th>
                     <th>AZ</th>
                     <th>vCPUs / Memory</th>
-                    <th>Assured / Max Bandwidth</th>
+                    <th>Port Speed</th>
                     <th>Packets Per Second</th>
                     <th>Max. Pods</th>
                     <th>Pricing</th>
@@ -634,7 +634,7 @@ function create() {
                     <td class="mono cell-main">{{ f.id }}</td>
                     <td class="text-body-2" :class="{ muted: f.azs.some((z) => z.soldOut) }">{{ azCell(f) }}</td>
                     <td class="text-body-2">{{ f.vcpu }} vCPUs / {{ f.ram }} GiB</td>
-                    <td class="text-body-2 muted">{{ f.bandwidth }}</td>
+                    <td class="text-body-2 muted">{{ f.bandwidth.split(' / ').pop() }}</td>
                     <td class="text-body-2 muted">{{ f.pps }} pps</td>
                     <td class="text-body-2">{{ f.maxPods }}</td>
                     <td class="text-body-2-strong">{{ fmtIRR(f.pricePerHour) }} IRR/hour</td>
