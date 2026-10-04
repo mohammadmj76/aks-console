@@ -10,6 +10,7 @@ import ArButton from '../components/ui/ArButton.vue'
 import ArCheckbox from '../components/ui/ArCheckbox.vue'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSelectMenu from '../components/ui/ArSelectMenu.vue'
+import ArRadioDot from '../components/ui/ArRadioDot.vue'
 
 const router = useRouter()
 
@@ -611,7 +612,7 @@ function create() {
                     @click="!allZonesSoldOut(f) && toggleFlavor(f)"
                   >
                     <td @click.stop>
-                      <ArCheckbox
+                      <ArRadioDot
                         :model-value="specSelected(f)"
                         :disabled="allZonesSoldOut(f)"
                         @update:model-value="toggleFlavor(f)"
