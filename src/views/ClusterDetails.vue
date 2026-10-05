@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store, downloadKubeconfig, newerVersionAvailable } from '../store'
-import { REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, VPCS, apiEndpoint, fmtDate, flavorName, flavorSpec, flavor } from '../data'
+import { REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, VPCS, apiEndpoint, fmtDate, flavorName, flavorSpec } from '../data'
 import ArButton from '../components/ui/ArButton.vue'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
@@ -21,18 +21,11 @@ const cluster = computed(() => store.getCluster(route.params.id))
 const vpc = computed(() => VPCS.find((v) => v.id === cluster.value?.vpcId))
 const cpPlan = computed(() => CP_PLANS.find((p) => p.id === cluster.value?.cp.plan))
 const nodeCount = computed(() => cluster.value?.pools.reduce((n, p) => n + p.count, 0) || 0)
-/* aggregated worker-node capacity from pool flavors */
-const capacity = computed(() => {
-  let vcpu = 0
-  let ram = 0
-  for (const p of cluster.value?.pools || []) {
-    for (const sp of p.specs || []) {
-      const f = flavor(sp.flavorId)
-      vcpu += (f?.vcpu || 0) * p.count
-      ram += (f?.ram || 0) * p.count
-    }
-  }
-  return { vcpu, ram }
+/* active warnings: Warning-level O&M events + Alarm-level Kubernetes events */
+const warningCount = computed(() => {
+  const om = (store.events[cluster.value?.id] || []).filter((e) => e.type === 'Warning').length
+  const k8s = K8S_EVENT_POOL.filter((e) => e.type === 'Alarm').length
+  return om + k8s
 })
 
 const tab = ref('overview')
@@ -332,8 +325,13 @@ function menuAction(item) {
             </button>
           </div>
         </StatCard>
-        <StatCard label="WORKLOAD CAPACITY" :value="String(capacity.vcpu)" unit="vCPUs">
-          <span class="text-caption-1 muted">{{ capacity.ram }} GiB memory across {{ nodeCount }} worker node{{ nodeCount === 1 ? '' : 's' }}</span>
+        <StatCard
+          label="ACTIVE WARNINGS"
+          :value="String(warningCount)"
+          :badge="warningCount ? `${warningCount} need${warningCount === 1 ? 's' : ''} attention` : 'All clear'"
+          :badge-tone="warningCount ? 'warning' : 'success'"
+        >
+          <button class="link-btn" @click="tab = 'events'">View events</button>
         </StatCard>
         <StatCard label="PODS" :value="String(cluster.usage.pods)">
           <span class="text-caption-1 muted">across all namespaces</span>
