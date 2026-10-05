@@ -259,7 +259,7 @@ function menuAction(item) {
           <span class="ar-badge neutral pill">v{{ cluster.version }}</span>
         </div>
         <div class="meta">
-          <span class="text-body-2 muted">{{ cluster.description || 'No description' }} · created {{ fmtDate(cluster.createdAt) }}</span>
+          <span class="text-body-2 muted">created {{ fmtDate(cluster.createdAt) }}</span>
         </div>
       </div>
       <div style="display: flex; gap: var(--space-3)">
