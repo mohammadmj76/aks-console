@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store, downloadKubeconfig, newerVersionAvailable } from '../store'
-import { REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, VPCS, apiEndpoint, fmtDate, flavorName, flavorSpec, monthlyPrice, fmtIRR } from '../data'
+import { REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, VPCS, apiEndpoint, fmtDate, flavorName, flavorSpec, flavor } from '../data'
 import ArButton from '../components/ui/ArButton.vue'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
@@ -21,13 +21,18 @@ const cluster = computed(() => store.getCluster(route.params.id))
 const vpc = computed(() => VPCS.find((v) => v.id === cluster.value?.vpcId))
 const cpPlan = computed(() => CP_PLANS.find((p) => p.id === cluster.value?.cp.plan))
 const nodeCount = computed(() => cluster.value?.pools.reduce((n, p) => n + p.count, 0) || 0)
-const cost = computed(() => {
-  const c = cluster.value
-  if (!c) return null
-  const pools = c.pools.length
-    ? c.pools.map((p) => ({ count: p.count, specs: p.specs, volumeGb: p.volumeGb }))
-    : null
-  return monthlyPrice({ cp: { plan: c.cp.plan }, pool: pools })
+/* aggregated worker-node capacity from pool flavors */
+const capacity = computed(() => {
+  let vcpu = 0
+  let ram = 0
+  for (const p of cluster.value?.pools || []) {
+    for (const sp of p.specs || []) {
+      const f = flavor(sp.flavorId)
+      vcpu += (f?.vcpu || 0) * p.count
+      ram += (f?.ram || 0) * p.count
+    }
+  }
+  return { vcpu, ram }
 })
 
 const tab = ref('overview')
@@ -327,8 +332,8 @@ function menuAction(item) {
             </button>
           </div>
         </StatCard>
-        <StatCard label="ESTIMATED COST" :value="fmtIRR(cost.hourly)" unit="IRR / hour">
-          <span class="text-caption-1 muted">≈ {{ fmtIRR(cost.total) }} IRR / month · control plane + nodes + volumes</span>
+        <StatCard label="WORKLOAD CAPACITY" :value="String(capacity.vcpu)" unit="vCPUs">
+          <span class="text-caption-1 muted">{{ capacity.ram }} GiB memory across {{ nodeCount }} worker node{{ nodeCount === 1 ? '' : 's' }}</span>
         </StatCard>
         <StatCard label="PODS" :value="String(cluster.usage.pods)">
           <span class="text-caption-1 muted">across all namespaces</span>
