@@ -161,7 +161,6 @@ const fCat = ref('Basic')
 const fVcpu = ref('')
 const fMem = ref('')
 const fAz = ref('')
-const fQ = ref('')
 const page = ref(1)
 const perPage = ref(5)
 
@@ -175,7 +174,6 @@ const filteredFlavors = computed(() =>
     if (fMem.value !== '' && f.ram !== +fMem.value) return false
     // values arrive as strings from ArSelectMenu — comparisons above already coerce with +
     if (fAz.value !== '' && !f.azs.some((z) => z.id === fAz.value && !z.soldOut)) return false
-    if (fQ.value && !f.id.toLowerCase().includes(fQ.value.toLowerCase())) return false
     return true
   })
 )
@@ -183,7 +181,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil(filteredFlavors.value.le
 const pagedFlavors = computed(() =>
   filteredFlavors.value.slice((page.value - 1) * perPage.value, page.value * perPage.value)
 )
-watch([fCat, fVcpu, fMem, fAz, fQ], () => { page.value = 1 })
+watch([fCat, fVcpu, fMem, fAz], () => { page.value = 1 })
 
 const pageNumbers = computed(() => Array.from({ length: totalPages.value }, (_, i) => i + 1))
 
@@ -616,13 +614,6 @@ function create() {
                   :options="[{ value: '', label: 'All' }, ...REGION.zones.map((z) => ({ value: z.id, label: z.name }))]"
                   aria-label="AZ"
                 />
-              </div>
-              <div class="ar-field" style="flex: 1; min-width: 180px">
-                <label>Flavor</label>
-                <div class="ar-input">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
-                  <input v-model="fQ" placeholder="Search flavor name" />
-                </div>
               </div>
             </div>
 
