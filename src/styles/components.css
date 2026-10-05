@@ -167,7 +167,7 @@
 .ar-toggle input:disabled ~ .track { opacity: .4; }
 .ar-toggle input:disabled { cursor: not-allowed; }
 
-.ar-checkbox { position: relative; width: 18px; height: 18px; flex: none; display: inline-block; }
+.ar-checkbox { position: relative; width: 18px; height: 18px; flex: none; display: inline-block; cursor: pointer; }
 .ar-checkbox input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
 .ar-checkbox .box {
   position: absolute; inset: 0; border-radius: var(--radius-sm);
