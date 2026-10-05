@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import ClusterList from './views/ClusterList.vue'
 import ClusterCreate from './views/ClusterCreate.vue'
 import ClusterDetails from './views/ClusterDetails.vue'
+import PoolDetails from './views/PoolDetails.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -10,6 +11,7 @@ export const router = createRouter({
     { path: '/clusters', name: 'clusters', component: ClusterList },
     { path: '/clusters/create', name: 'cluster-create', component: ClusterCreate },
     { path: '/clusters/:id', name: 'cluster-details', component: ClusterDetails },
+    { path: '/clusters/:id/pools/:poolId', name: 'pool-details', component: PoolDetails },
     { path: '/:pathMatch(.*)*', redirect: '/clusters' },
   ],
   scrollBehavior() {

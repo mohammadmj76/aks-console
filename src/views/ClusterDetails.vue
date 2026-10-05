@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store, downloadKubeconfig, newerVersionAvailable } from '../store'
 import { REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, VPCS, apiEndpoint, fmtDate, flavorName, flavorSpec } from '../data'
@@ -28,7 +28,6 @@ const warningCount = computed(() => {
   return om + k8s
 })
 
-const tab = ref('overview')
 const tabs = [
   { id: 'overview', label: 'Overview' },
   { id: 'pools', label: 'Node pools' },
@@ -36,6 +35,17 @@ const tabs = [
   { id: 'operations', label: 'Operations' },
   { id: 'events', label: 'Events' },
 ]
+/* tab lives in the URL (?tab=pools) so pool pages can deep-link back to the list */
+const tab = ref(tabs.some((t) => t.id === route.query.tab) ? route.query.tab : 'overview')
+watch(tab, (t) => {
+  if (route.query.tab !== t) router.replace({ query: { ...route.query, tab: t } })
+})
+watch(
+  () => route.query.tab,
+  (t) => {
+    if (t && t !== tab.value && tabs.some((x) => x.id === t)) tab.value = t
+  }
+)
 
 /* ---------------- overview: master nodes table ---------------- */
 const monitorPanel = ref(false)
@@ -188,7 +198,7 @@ function submitPool() {
     specs: [{ flavorId: poolForm.flavor, zones: zones.length ? zones : REGION.zones.map((z) => z.id) }],
     zones: zones.length ? zones : REGION.zones.map((z) => z.id),
     subnets: [...cluster.value.subnetIds],
-    volumeGb: 50,
+    volumeGb: poolForm.volumeGb,
     labels: [...poolForm.labels],
     taints: poolForm.taints.filter((t) => t.key).map((t) => ({ ...t })),
     userData: poolForm.userData,
@@ -404,7 +414,10 @@ function menuAction(item) {
       <div v-for="pool in cluster.pools" :key="pool.id" class="ar-card" style="margin-bottom: var(--space-4)">
         <div style="display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--st-neutral-t1-1-default)">
           <div style="flex: 1; min-width: 0">
-            <div class="text-body-1">{{ pool.name }}</div>
+            <router-link
+              :to="{ name: 'pool-details', params: { id: cluster.id, poolId: pool.id } }"
+              class="pool-name-link text-body-1"
+            >{{ pool.name }}</router-link>
             <div class="cell-sub" style="margin-top: 2px">
               {{ poolFlavorIds(pool).map((id) => flavorName(id)).join(', ') }} ·
               {{ pool.count }} node{{ pool.count === 1 ? '' : 's' }} · ssd-g1 {{ pool.volumeGb }} GB
