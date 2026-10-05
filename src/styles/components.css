@@ -342,7 +342,7 @@ table.ar-table { width: 100%; border-collapse: collapse; }
 .ar-steps .bar { flex: 1; height: 1px; background: var(--st-neutral-t1-2-default); margin: 0 var(--space-2); min-width: 24px; }
 
 /* ---------- misc ---------- */
-.seg { display: inline-flex; background: var(--bg-neutral-t1-4-default); border-radius: var(--radius-md); padding: 2px; gap: 2px; }
+.seg { display: inline-flex; align-self: flex-start; width: fit-content; background: var(--bg-neutral-t1-4-default); border-radius: var(--radius-md); padding: 2px; gap: 2px; }
 .seg button {
   border: 0; background: none; cursor: pointer; font: inherit; font-size: 12px; font-weight: 450;
   padding: 4px 10px; border-radius: var(--radius-sm); color: var(--fg-neutral-t1-2-default);
