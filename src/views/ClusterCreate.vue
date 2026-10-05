@@ -675,6 +675,38 @@ function create() {
               </div>
             </div>
 
+            <!-- login mode (required) -->
+            <div class="ar-field" style="max-width: 640px">
+              <span class="ar-field-label">Login Mode<span class="req">*</span></span>
+              <div class="dist-rows">
+                <div class="dist-row">
+                  <div class="seg dist-seg">
+                    <button :class="{ on: draft.pool.loginMode === 'password' }" @click="draft.pool.loginMode = 'password'">Password</button>
+                    <button :class="{ on: draft.pool.loginMode === 'keypair' }" @click="draft.pool.loginMode = 'keypair'">Key Pair</button>
+                  </div>
+                </div>
+                <template v-if="draft.pool.loginMode === 'password'">
+                  <div class="dist-row" style="flex-wrap: nowrap">
+                    <span class="dist-k" style="width: 90px">Username</span>
+                    <span class="text-body-2-strong">root</span>
+                  </div>
+                  <div class="dist-row" style="flex-wrap: nowrap">
+                    <span class="dist-k" style="width: 90px">Password</span>
+                    <div class="ar-input" style="flex: 1; max-width: 250px" :class="{ 'error-mode': draft.pool.password && draft.pool.password.length < 8 }">
+                      <input v-model="draft.pool.password" type="password" placeholder="Enter a password." autocomplete="new-password" />
+                    </div>
+                    <div class="ar-input" style="flex: 1; max-width: 250px" :class="{ 'error-mode': draft.pool.passwordConfirm && draft.pool.passwordConfirm !== draft.pool.password }">
+                      <input v-model="draft.pool.passwordConfirm" type="password" placeholder="Confirm the password." autocomplete="new-password" />
+                    </div>
+                  </div>
+                  <span v-if="draft.pool.password && draft.pool.password.length < 8" class="error-text">Password must be at least 8 characters.</span>
+                  <span v-else-if="draft.pool.passwordConfirm && draft.pool.passwordConfirm !== draft.pool.password" class="error-text">Passwords do not match.</span>
+                  <p class="scale-note muted">The password is used to log in to the nodes of this pool over SSH.</p>
+                </template>
+                <p v-else class="scale-note muted">Choose an SSH key pair from your project after the cluster is created.</p>
+              </div>
+            </div>
+
             <!-- advanced settings (optional) -->
             <button class="adv-toggle" @click="advOpen = !advOpen">
               Advanced Settings (Optional)
@@ -706,35 +738,6 @@ function create() {
                     </button>
                   </div>
                   <p v-else class="scale-note muted">Private images are not available yet.</p>
-                </div>
-              </div>
-
-              <!-- Login mode -->
-              <div class="dist-row" style="align-items: flex-start">
-                <span class="dist-k" style="margin-top: 6px">Login Mode</span>
-                <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-3)">
-                  <div class="seg">
-                    <button :class="{ on: draft.pool.loginMode === 'password' }" @click="draft.pool.loginMode = 'password'">Password</button>
-                    <button :class="{ on: draft.pool.loginMode === 'keypair' }" @click="draft.pool.loginMode = 'keypair'">Key Pair</button>
-                  </div>
-                  <div v-if="draft.pool.loginMode === 'password'" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); max-width: 560px">
-                    <div class="dist-row" style="flex-wrap: nowrap">
-                      <span class="dist-k" style="width: 90px">Username</span>
-                      <span class="text-body-2-strong">root</span>
-                    </div>
-                    <div class="dist-row">
-                      <span class="dist-k" style="width: 90px">Password</span>
-                      <div class="ar-input" style="flex: 1" :class="{ 'error-mode': draft.pool.password && draft.pool.password.length < 8 }">
-                        <input v-model="draft.pool.password" type="password" placeholder="Enter a password." autocomplete="new-password" />
-                      </div>
-                      <div class="ar-input" style="flex: 1" :class="{ 'error-mode': draft.pool.passwordConfirm && draft.pool.passwordConfirm !== draft.pool.password }">
-                        <input v-model="draft.pool.passwordConfirm" type="password" placeholder="Confirm the password." autocomplete="new-password" />
-                      </div>
-                    </div>
-                    <span v-if="draft.pool.password && draft.pool.password.length < 8" class="error-text">Password must be at least 8 characters.</span>
-                    <span v-else-if="draft.pool.passwordConfirm && draft.pool.passwordConfirm !== draft.pool.password" class="error-text">Passwords do not match.</span>
-                  </div>
-                  <p v-else class="scale-note muted">Choose an SSH key pair from your project after the cluster is created.</p>
                 </div>
               </div>
             </div>
@@ -873,6 +876,7 @@ function create() {
               <p>Pool Name: {{ draft.pool.name || (draft.specs.length ? 'node-pool-1' : '—') }}</p>
               <p>Flavors: {{ draft.specs.length ? draft.specs.map((s) => s.flavorId).join(', ') : '—' }}</p>
               <p v-if="draft.specs.length">Availability Zone: {{ [...new Set(draft.specs.flatMap((s) => s.zones))].map(zoneName).join(', ') || '—' }}</p>
+              <p>Login: {{ draft.pool.loginMode === 'password' ? 'Password' : 'Key Pair' }}</p>
             </div>
           </div>
 
@@ -891,7 +895,7 @@ function create() {
             Create Kubernetes Cluster
           </ArButton>
           <p v-if="!canCreate" class="text-caption-1 muted" style="margin: var(--space-2) 0 0; text-align: center">
-            Complete name, subnets, CIDRs{{ draft.specs.length ? ' and AZ selection' : '' }} to enable creation.
+            Complete name, subnets, CIDRs, login credentials{{ draft.specs.length ? ' and AZ selection' : '' }} to enable creation.
           </p>
         </div>
       </aside>
