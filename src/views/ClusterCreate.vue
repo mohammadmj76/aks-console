@@ -26,7 +26,7 @@ const draft = reactive({
   subnetIds: [],
   podCidrs: [{ octets: ['192', '168', '0', '0'], prefix: '16' }],
   svcCidrs: [{ octets: ['10', '10', '0', '0'], prefix: '24' }],
-  pool: { name: '', image: 'ubuntu-22.04', loginMode: 'password', password: '', passwordConfirm: '' },
+  pool: { name: '', image: 'ubuntu-22.04', loginMode: 'password', password: '', passwordConfirm: '', labels: [], taints: [], userData: '' },
   specs: [], // [{ flavorId, zones: [] }]
 })
 
@@ -70,7 +70,7 @@ const passwordOk = computed(
     (draft.pool.password.length >= 8 && draft.pool.password === draft.pool.passwordConfirm)
 )
 const canCreate = computed(
-  () => nameOk.value && subnetOk.value && cidrsOk.value && poolNameOk.value && specsOk.value && masterAzsOk.value && passwordOk.value
+  () => nameOk.value && subnetOk.value && cidrsOk.value && poolNameOk.value && specsOk.value && masterAzsOk.value && passwordOk.value && nodeLabelOk.value && taintsOk.value && userDataOk.value
 )
 
 const price = computed(() =>
@@ -128,6 +128,33 @@ function addLabel() {
 function removeLabel(l) {
   draft.labels = draft.labels.filter((x) => x !== l)
 }
+
+/* node pool labels / taints / startup script */
+const K8S_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?(\/[a-z0-9]([a-z0-9-.]*[a-z0-9])?)?$/
+const K8S_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
+const nodeLabelInput = ref('')
+const nodeLabelOk = computed(() => draft.pool.labels.every((l) => {
+  const [k, v] = l.split('=')
+  return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
+}))
+function addNodeLabel() {
+  const v = nodeLabelInput.value.trim().replace(/\s+/g, '')
+  if (v && v.includes('=') && !draft.pool.labels.includes(v) && draft.pool.labels.length < 20) draft.pool.labels.push(v)
+  nodeLabelInput.value = ''
+}
+function removeNodeLabel(l) {
+  draft.pool.labels = draft.pool.labels.filter((x) => x !== l)
+}
+function addTaint() {
+  draft.pool.taints.push({ key: '', value: '', effect: 'NoSchedule' })
+}
+function removeTaint(t) {
+  draft.pool.taints = draft.pool.taints.filter((x) => x !== t)
+}
+const taintsOk = computed(() =>
+  draft.pool.taints.every((t) => K8S_KEY.test(t.key) && (t.value === '' || K8S_VAL.test(t.value)))
+)
+const userDataOk = computed(() => !draft.pool.userData || draft.pool.userData.length <= 16000)
 
 /* ---------------- flavor catalog ---------------- */
 const fCat = ref('Basic')
@@ -205,7 +232,14 @@ function create() {
       podCidr: cidrStr(draft.podCidrs[0]),
       svcCidr: cidrStr(draft.svcCidrs[0]),
       pool: draft.specs.length
-        ? { name: draft.pool.name || 'node-pool-1', count: draft.specs.length, specs: JSON.parse(JSON.stringify(draft.specs)) }
+        ? {
+            name: draft.pool.name || 'node-pool-1',
+            count: draft.specs.length,
+            specs: JSON.parse(JSON.stringify(draft.specs)),
+            labels: [...draft.pool.labels],
+            taints: draft.pool.taints.filter((t) => t.key).map((t) => ({ ...t })),
+            userData: draft.pool.userData,
+          }
         : null,
     })
     creating.value = false
@@ -740,6 +774,76 @@ function create() {
                   <p v-else class="scale-note muted">Private images are not available yet.</p>
                 </div>
               </div>
+
+              <!-- Node labels -->
+              <div class="dist-row" style="align-items: flex-start">
+                <span class="dist-k" style="margin-top: 6px">Node Labels</span>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-2); max-width: 560px">
+                  <div class="tagbox">
+                    <span v-for="l in draft.pool.labels" :key="l" class="ar-tag mono">
+                      {{ l }}
+                      <button class="tag-x" aria-label="Remove label" @click="removeNodeLabel(l)">
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+                      </button>
+                    </span>
+                    <input
+                      v-model="nodeLabelInput"
+                      placeholder="key=value"
+                      spellcheck="false"
+                      @keydown.enter.prevent="addNodeLabel"
+                    />
+                  </div>
+                  <span v-if="nodeLabelInput && !nodeLabelOk" class="error-text">Use key=value — lowercase keys (letters, digits, -, .), values up to 63 characters.</span>
+                  <span v-else class="hint">Applied as Kubernetes labels to every node of this pool. Press Enter after each label. Up to 20.</span>
+                </div>
+              </div>
+
+              <!-- Taints -->
+              <div class="dist-row" style="align-items: flex-start">
+                <span class="dist-k" style="margin-top: 6px">Taints</span>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-3); max-width: 560px">
+                  <div v-for="(t, i) in draft.pool.taints" :key="i" class="dist-row" style="flex-wrap: nowrap; gap: var(--space-2)">
+                    <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.key && !K8S_KEY.test(t.key) }">
+                      <input v-model="t.key" placeholder="Key" spellcheck="false" style="text-transform: lowercase" />
+                    </div>
+                    <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.value && !K8S_VAL.test(t.value) }">
+                      <input v-model="t.value" placeholder="Value" spellcheck="false" />
+                    </div>
+                    <ArSelectMenu
+                      class="taint-effect"
+                      v-model="t.effect"
+                      :options="['NoSchedule', 'PreferNoSchedule', 'NoExecute']"
+                      aria-label="Taint effect"
+                    />
+                    <button class="taint-x" aria-label="Remove taint" @click="removeTaint(t)">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+                    </button>
+                  </div>
+                  <button class="link-btn" @click="addTaint">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
+                    Add taint
+                  </button>
+                  <span v-if="draft.pool.taints.length && !taintsOk" class="error-text">Taint keys must be lowercase (letters, digits, -, .). Value is optional.</span>
+                  <span v-else class="hint">Tainted nodes repel pods that do not tolerate the taint. Value is optional.</span>
+                </div>
+              </div>
+
+              <!-- Startup script -->
+              <div class="dist-row" style="align-items: flex-start">
+                <span class="dist-k" style="margin-top: 6px">Startup Script</span>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-2); max-width: 560px">
+                  <div class="ar-input textarea" :class="{ 'error-mode': draft.pool.userData.length > 16000 }">
+                    <textarea
+                      v-model="draft.pool.userData"
+                      rows="5"
+                      placeholder="#!/bin/bash"
+                      spellcheck="false"
+                      style="font-family: var(--font-mono, monospace); font-size: 12px"
+                    ></textarea>
+                  </div>
+                  <span class="hint">A cloud-init user-data script that runs on every node of this pool at first boot. Maximum 16 KB.</span>
+                </div>
+              </div>
             </div>
 
             <!-- selected specification (single) -->
@@ -877,6 +981,9 @@ function create() {
               <p>Flavors: {{ draft.specs.length ? draft.specs.map((s) => s.flavorId).join(', ') : '—' }}</p>
               <p v-if="draft.specs.length">Availability Zone: {{ [...new Set(draft.specs.flatMap((s) => s.zones))].map(zoneName).join(', ') || '—' }}</p>
               <p>Login: {{ draft.pool.loginMode === 'password' ? 'Password' : 'Key Pair' }}</p>
+              <p v-if="draft.pool.labels.length || draft.pool.taints.length">
+                Labels/Taints: {{ draft.pool.labels.length }} label{{ draft.pool.labels.length === 1 ? '' : 's' }} · {{ draft.pool.taints.length }} taint{{ draft.pool.taints.length === 1 ? '' : 's' }}
+              </p>
             </div>
           </div>
 
@@ -896,6 +1003,9 @@ function create() {
           </ArButton>
           <p v-if="!canCreate" class="text-caption-1 muted" style="margin: var(--space-2) 0 0; text-align: center">
             Complete name, subnets, CIDRs, login credentials{{ draft.specs.length ? ' and AZ selection' : '' }} to enable creation.
+          </p>
+          <p v-else-if="!nodeLabelOk || !taintsOk" class="error-text" style="margin: var(--space-2) 0 0; text-align: center">
+            Fix invalid node labels or taints in Advanced Settings to enable creation.
           </p>
         </div>
       </aside>

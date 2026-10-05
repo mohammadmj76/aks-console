@@ -45,6 +45,9 @@ export const store = reactive({
           zones,
           subnets: [...draft.subnetIds],
           volumeGb: 50,
+          labels: [...(poolDraft.labels || [])],
+          taints: (poolDraft.taints || []).filter((t) => t.key).map((t) => ({ ...t })),
+          userData: poolDraft.userData || '',
         }]
       : []
 
@@ -127,7 +130,13 @@ export const store = reactive({
   },
 
   addPool(cluster, pool) {
-    cluster.pools.push({ ...pool, id: 'pool-' + nextId() })
+    cluster.pools.push({
+      labels: [],
+      taints: [],
+      userData: '',
+      ...pool,
+      id: 'pool-' + nextId(),
+    })
     this.events[cluster.id].unshift({ ts: timeNow(), type: 'Normal', reason: 'NodePoolCreated', msg: `Node pool ${pool.name} created (${pool.count} nodes)` })
     this.toast('success', 'Node pool created', `${pool.name} is joining ${cluster.name}.`)
   },

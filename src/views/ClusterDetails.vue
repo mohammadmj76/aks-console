@@ -8,6 +8,7 @@ import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
 import DonutGauge from '../components/ui/DonutGauge.vue'
 import ArProgress from '../components/ui/ArProgress.vue'
+import ArSelectMenu from '../components/ui/ArSelectMenu.vue'
 import ArEmpty from '../components/ui/ArEmpty.vue'
 import ActionMenu from '../components/ui/ActionMenu.vue'
 import StatCard from '../components/ui/StatCard.vue'
@@ -147,10 +148,33 @@ const expandedPools = reactive({})
 
 /* add pool panel */
 const showAddPool = ref(false)
-const poolForm = reactive({ name: '', flavor: 'g6.xlarge.2', count: 2 })
+const poolForm = reactive({ name: '', flavor: 'g6.xlarge.2', count: 2, labels: [], taints: [], userData: '' })
 const poolFormOk = computed(() => /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(poolForm.name) && poolForm.count >= 1)
+const K8S_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?$/
+const K8S_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
+const poolMetaOk = computed(() =>
+  poolForm.labels.every((l) => {
+    const [k, v] = l.split('=')
+    return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v)
+  }) && poolForm.taints.every((t) => K8S_KEY.test(t.key) && (t.value === '' || K8S_VAL.test(t.value)))
+)
+const poolLabelInput = ref('')
+function addPoolLabel() {
+  const v = poolLabelInput.value.trim().replace(/\s+/g, '')
+  if (v && v.includes('=') && !poolForm.labels.includes(v) && poolForm.labels.length < 20) poolForm.labels.push(v)
+  poolLabelInput.value = ''
+}
+function removePoolLabel(l) {
+  poolForm.labels = poolForm.labels.filter((x) => x !== l)
+}
+function addPoolTaint() {
+  poolForm.taints.push({ key: '', value: '', effect: 'NoSchedule' })
+}
+function removePoolTaint(t) {
+  poolForm.taints = poolForm.taints.filter((x) => x !== t)
+}
 function submitPool() {
-  if (!poolFormOk.value || !cluster.value) return
+  if (!poolFormOk.value || !poolMetaOk.value || !cluster.value) return
   const zones = cluster.value.subnetIds.map((id) => vpc.value?.subnets.find((s) => s.id === id)?.zone).filter(Boolean)
   store.addPool(cluster.value, {
     name: poolForm.name,
@@ -159,9 +183,15 @@ function submitPool() {
     zones: zones.length ? zones : REGION.zones.map((z) => z.id),
     subnets: [...cluster.value.subnetIds],
     volumeGb: 50,
+    labels: [...poolForm.labels],
+    taints: poolForm.taints.filter((t) => t.key).map((t) => ({ ...t })),
+    userData: poolForm.userData,
   })
   showAddPool.value = false
   poolForm.name = ''
+  poolForm.labels = []
+  poolForm.taints = []
+  poolForm.userData = ''
 }
 
 /* delete cluster */
@@ -368,6 +398,12 @@ function menuAction(item) {
               {{ poolFlavorIds(pool).map((id) => flavorName(id)).join(', ') }} ·
               {{ pool.count }} node{{ pool.count === 1 ? '' : 's' }} · ssd-g1 {{ pool.volumeGb }} GB
               · {{ pool.zones.length ? pool.zones.map((z) => REGION.zones.find((zz) => zz.id === z)?.name).join(', ') : 'all zones' }}
+            </div>
+            <div v-if="(pool.labels?.length || pool.taints?.length)" class="pool-meta" style="margin-top: var(--space-2)">
+              <span v-for="l in pool.labels || []" :key="l" class="ar-tag mono" style="font-size: 11px">{{ l }}</span>
+              <span v-for="(t, i) in pool.taints || []" :key="'t' + i" class="ar-tag warning mono" style="font-size: 11px">
+                <span class="dot"></span>{{ t.key }}{{ t.value ? '=' + t.value : '' }}:{{ t.effect }}
+              </span>
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: var(--space-2)">
@@ -734,9 +770,61 @@ function menuAction(item) {
         </div>
       </div>
 
+      <div class="ar-field">
+        <label>Node labels</label>
+        <div class="tagbox">
+          <span v-for="l in poolForm.labels" :key="l" class="ar-tag mono" style="font-size: 11px">
+            {{ l }}
+            <button class="tag-x" aria-label="Remove label" @click="removePoolLabel(l)">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+            </button>
+          </span>
+          <input v-model="poolLabelInput" placeholder="key=value" spellcheck="false" @keydown.enter.prevent="addPoolLabel" />
+        </div>
+        <span v-if="poolForm.labels.length && !poolMetaOk" class="error-text">Use key=value — lowercase keys, values up to 63 characters.</span>
+        <span v-else class="hint">Applied as Kubernetes labels to every node of this pool. Press Enter after each label.</span>
+      </div>
+
+      <div class="ar-field">
+        <span class="ar-field-label">Taints</span>
+        <div style="display: flex; flex-direction: column; gap: var(--space-2)">
+          <div v-for="(t, i) in poolForm.taints" :key="i" style="display: flex; gap: var(--space-2)">
+            <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.key && !K8S_KEY.test(t.key) }">
+              <input v-model="t.key" placeholder="Key" spellcheck="false" style="text-transform: lowercase" />
+            </div>
+            <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.value && !K8S_VAL.test(t.value) }">
+              <input v-model="t.value" placeholder="Value" spellcheck="false" />
+            </div>
+            <ArSelectMenu
+              class="taint-effect"
+              style="width: 150px"
+              v-model="t.effect"
+              :options="['NoSchedule', 'PreferNoSchedule', 'NoExecute']"
+              aria-label="Taint effect"
+            />
+            <button class="taint-x" aria-label="Remove taint" @click="removePoolTaint(t)">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+          <button class="link-btn" @click="addPoolTaint">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
+            Add taint
+          </button>
+        </div>
+        <span v-if="poolForm.taints.length && !poolMetaOk" class="error-text">Taint keys must be lowercase (letters, digits, -, .). Value is optional.</span>
+      </div>
+
+      <div class="ar-field">
+        <label>Startup script</label>
+        <div class="ar-input textarea">
+          <textarea v-model="poolForm.userData" rows="4" placeholder="#!/bin/bash" spellcheck="false" style="font-family: var(--font-mono, monospace); font-size: 12px"></textarea>
+        </div>
+        <span class="hint">A cloud-init user-data script that runs on every node of this pool at first boot.</span>
+      </div>
+
       <template #footer>
         <ArButton variant="tertiary" @click="showAddPool = false">Cancel</ArButton>
-        <ArButton variant="primary" :disabled="!poolFormOk" @click="submitPool">Add pool</ArButton>
+        <ArButton variant="primary" :disabled="!poolFormOk || !poolMetaOk" @click="submitPool">Add pool</ArButton>
       </template>
     </ArSidePanel>
 
