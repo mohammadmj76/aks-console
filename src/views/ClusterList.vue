@@ -61,6 +61,32 @@ function menuAction(c, item) {
   if (item.action === 'kube') downloadKubeconfig(c)
   if (item.action === 'delete') askDelete(c)
 }
+
+/* tags column: first tag inline, "+N" chip reveals the rest on hover (teleported popover) */
+const hoverTags = ref(null)
+const pop = ref({ x: 0, y: 0, flip: false })
+let hideTimer = null
+function showTags(e, c) {
+  clearTimeout(hideTimer)
+  const r = e.currentTarget.getBoundingClientRect()
+  const vh = window.innerHeight || 800
+  const vw = window.innerWidth || 1200
+  const estH = c.labels.length * 34 + 20
+  const flip = r.bottom + estH + 12 > vh && r.top > estH + 12
+  pop.value = {
+    x: Math.max(8, Math.min(r.left, vw - 236)),
+    y: flip ? r.top - 6 : r.bottom + 6,
+    flip,
+  }
+  hoverTags.value = c
+}
+function hideTags() {
+  clearTimeout(hideTimer)
+  hideTimer = setTimeout(() => (hoverTags.value = null), 140)
+}
+function keepTags() {
+  clearTimeout(hideTimer)
+}
 </script>
 
 <template>
@@ -131,6 +157,7 @@ function menuAction(c, item) {
             </th>
             <th>Name</th>
             <th>Status</th>
+            <th>Tags</th>
             <th>Version</th>
             <th>Control plane</th>
             <th>Nodes</th>
@@ -150,6 +177,18 @@ function menuAction(c, item) {
             <td @click.stop>
               <ClusterStatus :status="c.status" />
               <div v-if="c.upgrade" class="cell-sub">{{ c.upgrade.from }} → {{ c.upgrade.to }}</div>
+            </td>
+            <td @click.stop>
+              <div v-if="c.labels?.length" class="tags-cell">
+                <span
+                  v-if="c.labels.length > 1"
+                  class="tag-more"
+                  @mouseenter="showTags($event, c)"
+                  @mouseleave="hideTags"
+                >+{{ c.labels.length - 1 }}</span>
+                <span class="ar-tag mono">{{ c.labels[0] }}</span>
+              </div>
+              <span v-else class="text-body-2 muted">—</span>
             </td>
             <td class="text-body-2">{{ c.version }}</td>
             <td class="text-body-2">
@@ -198,5 +237,19 @@ function menuAction(c, item) {
         <ArButton variant="danger" :disabled="!deleteReady" @click="doDelete">Delete cluster</ArButton>
       </template>
     </ArSidePanel>
+
+    <!-- hidden tags popover (hover on "+N") -->
+    <Teleport to="body">
+      <div
+        v-if="hoverTags"
+        class="tags-pop"
+        :class="{ flip: pop.flip }"
+        :style="{ top: pop.y + 'px', left: pop.x + 'px' }"
+        @mouseenter="keepTags"
+        @mouseleave="hideTags"
+      >
+        <span v-for="l in hoverTags.labels.slice(1)" :key="l" class="ar-tag mono">{{ l }}</span>
+      </div>
+    </Teleport>
   </main>
 </template>
