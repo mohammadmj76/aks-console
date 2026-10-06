@@ -132,11 +132,11 @@ function keepTags() {
             </th>
             <th>Name</th>
             <th>Status</th>
-            <th>Tags</th>
             <th>Version</th>
             <th>Control plane</th>
             <th>Nodes</th>
             <th>Created</th>
+            <th>Tags</th>
             <th style="width: 48px"></th>
           </tr>
         </thead>
@@ -153,6 +153,14 @@ function keepTags() {
               <ClusterStatus :status="c.status" />
               <div v-if="c.upgrade" class="cell-sub">{{ c.upgrade.from }} → {{ c.upgrade.to }}</div>
             </td>
+            <td class="text-body-2">{{ c.version }}</td>
+            <td class="text-body-2">
+              {{ { xsmall: 'xSmall', small: 'Small', medium: 'Medium', large: 'Large', xlarge: 'XLarge' }[c.cp.plan] }}
+              <span class="muted">·</span>
+              {{ c.cp.ha ? 'HA' : 'Single' }}
+            </td>
+            <td class="text-body-2">{{ c.pools.reduce((n, p) => n + p.count, 0) }}</td>
+            <td class="text-body-2 muted">{{ fmtDate(c.createdAt) }}</td>
             <td @click.stop>
               <div v-if="c.labels?.length" class="tags-cell">
                 <span
@@ -165,14 +173,6 @@ function keepTags() {
               </div>
               <span v-else class="text-body-2 muted">—</span>
             </td>
-            <td class="text-body-2">{{ c.version }}</td>
-            <td class="text-body-2">
-              {{ { xsmall: 'xSmall', small: 'Small', medium: 'Medium', large: 'Large', xlarge: 'XLarge' }[c.cp.plan] }}
-              <span class="muted">·</span>
-              {{ c.cp.ha ? 'HA' : 'Single' }}
-            </td>
-            <td class="text-body-2">{{ c.pools.reduce((n, p) => n + p.count, 0) }}</td>
-            <td class="text-body-2 muted">{{ fmtDate(c.createdAt) }}</td>
             <td @click.stop style="text-align: right">
               <ActionMenu
                 :items="[
