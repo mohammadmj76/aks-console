@@ -2,13 +2,12 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { store, downloadKubeconfig } from '../store'
-import { REGION, QUOTA, fmtDate } from '../data'
+import { REGION, fmtDate } from '../data'
 import ArButton from '../components/ui/ArButton.vue'
 import ArCheckbox from '../components/ui/ArCheckbox.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
 import ArEmpty from '../components/ui/ArEmpty.vue'
 import ActionMenu from '../components/ui/ActionMenu.vue'
-import StatCard from '../components/ui/StatCard.vue'
 import ClusterStatus from '../components/ClusterStatus.vue'
 
 const router = useRouter()
@@ -23,11 +22,6 @@ const filtered = computed(() =>
     return true
   })
 )
-
-const totalNodes = computed(() =>
-  store.clusters.reduce((n, c) => n + c.pools.reduce((m, p) => m + p.count, 0), 0)
-)
-const unhealthy = computed(() => store.clusters.filter((c) => c.status === 'error').length)
 
 /* selection */
 const selected = ref(new Set())
@@ -104,25 +98,6 @@ function keepTags() {
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
         Create Kubernetes Cluster
       </router-link>
-    </div>
-
-    <div class="stats-grid">
-      <StatCard label="CLUSTERS" :value="String(store.clusters.length)" :unit="`/ ${store.clusterQuota} quota`">
-        <div class="ar-progress" :style="{ '--w': (store.clusters.length / store.clusterQuota) * 100 + '%' }">
-          <div class="fill" :style="{ width: (store.clusters.length / store.clusterQuota) * 100 + '%' }" />
-        </div>
-      </StatCard>
-      <StatCard label="WORKER NODES" :value="String(totalNodes)" :unit="`/ ${QUOTA.nodes} quota`">
-        <span class="text-caption-1 muted">Across {{ store.clusters.length }} clusters in {{ REGION.name }}</span>
-      </StatCard>
-      <StatCard
-        label="NEEDS ATTENTION"
-        :value="String(unhealthy)"
-        :badge="unhealthy ? 'Action needed' : 'All healthy'"
-        :badge-tone="unhealthy ? 'error' : 'success'"
-      >
-        <span class="text-caption-1 muted">Clusters in error or degraded state</span>
-      </StatCard>
     </div>
 
     <div class="ar-section-head">
