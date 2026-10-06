@@ -3,6 +3,8 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store, downloadKubeconfig, newerVersionAvailable } from '../store'
 import { REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, VPCS, apiEndpoint, fmtDate, flavorName, flavorSpec } from '../data'
+import { genPoints, genTimes, seedHash } from '../metrics'
+import MetricsChart from '../components/ui/MetricsChart.vue'
 import ArButton from '../components/ui/ArButton.vue'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
@@ -32,6 +34,7 @@ const tabs = [
   { id: 'overview', label: 'Overview' },
   { id: 'pools', label: 'Node pools' },
   { id: 'networking', label: 'Networking' },
+  { id: 'monitoring', label: 'Monitoring' },
   { id: 'operations', label: 'Operations' },
   { id: 'events', label: 'Events' },
 ]
@@ -82,6 +85,91 @@ const masterNodes = computed(() => {
     cpu: Math.round(((cluster.value?.usage.cpu || 18) * (0.55 + ((seed * 7 + i * 13) % 30) / 100)) * 100) / 100,
     mem: Math.round(((cluster.value?.usage.mem || 22) * (0.38 + ((seed * 5 + i * 17) % 26) / 100)) * 100) / 100,
   }))
+})
+
+/* ---------------- monitoring tab ---------------- */
+const monObject = ref('Cluster (masters average)')
+const monPeriod = ref('Last 1 hour')
+const PERIOD_HOURS = { 'Last 1 hour': 1, 'Last 6 hours': 6, 'Last 24 hours': 24 }
+const monObjects = computed(() => ['Cluster (masters average)', ...masterNodes.value.map((m) => m.name)])
+
+/* per-object base load derived deterministically from its name */
+const monLevel = computed(() => {
+  const h = (seedHash(monObject.value) % 1000) / 1000
+  return { cpu: 6 + h * 8, mem: 24 + h * 10, load: 0.12 + h * 0.15, disk: 6.5 + h * 3, io: 3 + h * 6 }
+})
+
+const monTimes = computed(() => genTimes(PERIOD_HOURS[monPeriod.value] || 1, 40))
+
+const CHART_COLORS = {
+  primary: 'var(--bg-primary-t1-1-default)',
+  green: 'var(--bg-success-t1-1-default)',
+  amber: 'var(--bg-warning-t1-1-default)',
+  blue: 'var(--bg-info-t1-1-default)',
+  violet: 'var(--fg-violet-t1-1-default)',
+}
+
+/* band helper: max/min hug the avg line */
+function band(s, key, avg, spreadBase, spreadVar) {
+  const sp = genPoints(s + key, { base: spreadBase, variance: spreadVar, min: 0.2 })
+  return {
+    max: avg.map((v, i) => Math.round((v + sp[i]) * 100) / 100),
+    min: avg.map((v, i) => Math.max(0, Math.round((v - sp[i] * 0.8) * 100) / 100)),
+  }
+}
+
+const monCharts = computed(() => {
+  const s = `${cluster.value.id}|${monObject.value}|${monPeriod.value}`
+  const L = monLevel.value
+  const T = monTimes.value
+  const C = CHART_COLORS
+
+  const cpu = genPoints(s + '|cpu', { base: L.cpu, variance: 2.6 })
+  const cpuBand = band(s, '|cpu', cpu, 1.6, 1)
+  const mem = genPoints(s + '|mem', { base: L.mem, variance: 1.1 })
+  const memBand = band(s, '|mem', mem, 1, 0.5)
+  const disk = genPoints(s + '|disk', { base: L.disk, variance: 0.25 })
+  const diskBand = band(s, '|disk', disk, 0.25, 0.12)
+  const rAvg = genPoints(s + '|ravg', { base: 1.5, variance: 0.8, min: 0 })
+  const wAvg = genPoints(s + '|wavg', { base: L.io, variance: 1.6, min: 0 })
+  const rMax = genPoints(s + '|rmax', { base: 4, variance: 2.5, spikes: 2, spikeAmp: 14, min: 0 }).map(
+    (v, i) => Math.max(v, rAvg[i])
+  )
+  const wMax = genPoints(s + '|wmax', { base: L.io + 2, variance: 3, spikes: 2, spikeAmp: 18, min: 0 }).map(
+    (v, i) => Math.max(v, wAvg[i])
+  )
+  const l1 = genPoints(s + '|l1', { base: L.load, variance: 0.05, min: 0.01 })
+  const l5 = genPoints(s + '|l5', { base: L.load * 0.82, variance: 0.035, min: 0.01 })
+  const l15 = genPoints(s + '|l15', { base: L.load * 0.68, variance: 0.02, min: 0.01 })
+
+  return [
+    { title: 'CPU Usage', unit: '%', series: [
+      { label: 'Avg', color: C.primary, points: cpu },
+      { label: 'Max', color: C.green, points: cpuBand.max },
+      { label: 'Min', color: C.amber, points: cpuBand.min },
+    ] },
+    { title: 'Load Average', unit: '', series: [
+      { label: '1 min', color: C.primary, points: l1 },
+      { label: '5 min', color: C.green, points: l5 },
+      { label: '15 min', color: C.amber, points: l15 },
+    ] },
+    { title: 'Memory Usage', unit: '%', series: [
+      { label: 'Avg', color: C.primary, points: mem },
+      { label: 'Max', color: C.green, points: memBand.max },
+      { label: 'Min', color: C.amber, points: memBand.min },
+    ] },
+    { title: 'Disk Usage', unit: '%', series: [
+      { label: 'Avg', color: C.primary, points: disk },
+      { label: 'Max', color: C.green, points: diskBand.max },
+      { label: 'Min', color: C.amber, points: diskBand.min },
+    ] },
+    { title: 'Disk I/O', unit: 'kB/s', series: [
+      { label: 'Read Avg', color: C.blue, points: rAvg },
+      { label: 'Write Avg', color: C.green, points: wAvg },
+      { label: 'Read Max', color: C.amber, points: rMax },
+      { label: 'Write Max', color: C.violet, points: wMax },
+    ] },
+  ]
 })
 
 /* ---------------- events tab ---------------- */
@@ -521,6 +609,33 @@ function menuAction(item) {
           </div>
         </div>
       </div>
+    </template>
+
+    <!-- ================= MONITORING ================= -->
+    <template v-if="tab === 'monitoring'">
+      <div class="ar-card" style="padding: var(--space-4) var(--space-6); margin-bottom: var(--space-4)">
+        <div style="display: flex; gap: var(--space-4); flex-wrap: wrap">
+          <div class="ar-field" style="margin: 0; width: 300px">
+            <span class="ar-field-label">Select Object</span>
+            <ArSelectMenu v-model="monObject" :options="monObjects" aria-label="Select Object" />
+          </div>
+          <div class="ar-field" style="margin: 0; width: 170px">
+            <span class="ar-field-label">Select Period</span>
+            <ArSelectMenu v-model="monPeriod" :options="Object.keys(PERIOD_HOURS)" aria-label="Select Period" />
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: var(--space-4)">
+        <div v-for="ch in monCharts" :key="ch.title" class="ar-card" style="padding: var(--space-5) var(--space-6)">
+          <MetricsChart :title="ch.title" :unit="ch.unit" :series="ch.series" :times="monTimes" />
+        </div>
+      </div>
+
+      <p class="text-caption-1 muted" style="margin-top: var(--space-3)">
+        Control-plane metrics · sampled every 60 seconds · 30-day retention. The cluster view shows the average across
+        {{ masterNodes.length }} master node{{ masterNodes.length === 1 ? '' : 's' }}; pick a node above for its individual curves.
+      </p>
     </template>
 
     <!-- ================= OPERATIONS (observability, Phase 2) ================= -->
