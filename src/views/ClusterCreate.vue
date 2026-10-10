@@ -1,16 +1,15 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { store } from '../store'
 import {
-  REGIONS, REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, FLAVOR_CATEGORIES,
-  VPCS, INCLUDED_COMPONENTS, monthlyPrice, fmtIRR,
+  REGIONS, REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG,
+  VPCS, KEY_PAIRS, INCLUDED_COMPONENTS, VOLUME_PRICE_PER_GB, fmtIRR,
 } from '../data'
 import ArButton from '../components/ui/ArButton.vue'
 import ArCheckbox from '../components/ui/ArCheckbox.vue'
-import ArToggle from '../components/ui/ArToggle.vue'
 import ArSelectMenu from '../components/ui/ArSelectMenu.vue'
-import ArRadioDot from '../components/ui/ArRadioDot.vue'
+import PoolCard from '../components/create/PoolCard.vue'
 
 const router = useRouter()
 
@@ -26,13 +25,46 @@ const draft = reactive({
   subnetIds: [],
   podCidrs: [{ octets: ['192', '168', '0', '0'], prefix: '16' }],
   svcCidrs: [{ octets: ['10', '10', '0', '0'], prefix: '24' }],
-  pool: { name: '', image: 'ubuntu-22.04', loginMode: 'password', password: '', passwordConfirm: '', labels: [], taints: [], userData: '' },
-  specs: [], // [{ flavorId, zones: [] }]
+  pools: [], // up to 3 — same accordion cards as the stepper flow
 })
 
-/* ---------------- advanced settings (node pool) ---------------- */
-const advOpen = ref(false)
-const poolImageTab = ref('public')
+/* pool factory — new pools copy the credentials of the first pool
+   (same-as-pool-1 default; each pool can still override) */
+let poolSeq = 0
+function makePool(from) {
+  poolSeq++
+  return {
+    id: `np-${poolSeq}`,
+    name: '',
+    count: 3,
+    specs: [], // single choice: [{ flavorId, zones: [] }]
+    loginMode: from?.loginMode || 'password',
+    password: from?.password || '',
+    passwordConfirm: from?.passwordConfirm || '',
+    keyPairId: from?.keyPairId || '',
+    image: from?.image || 'ubuntu-22.04',
+    labels: [],
+    taints: [],
+    userData: '',
+  }
+}
+draft.pools.push(makePool())
+const openId = ref(draft.pools[0].id)
+
+function togglePool(id) {
+  openId.value = openId.value === id ? '' : id
+}
+function addPool() {
+  if (draft.pools.length >= 3) return
+  const p = makePool(draft.pools[0])
+  draft.pools.push(p)
+  openId.value = p.id
+}
+function removePool(id) {
+  const i = draft.pools.findIndex((p) => p.id === id)
+  draft.pools.splice(i, 1)
+  if (openId.value === id) openId.value = draft.pools.at(-1)?.id || ''
+}
 
 /* ---------------- master distribution ---------------- */
 const masterDist = ref('automatic')
@@ -58,27 +90,59 @@ const subnetOk = computed(() => {
   return missingAzSubnets.value.length === 0
 })
 const cidrsOk = computed(() => isValidCidrs(draft.podCidrs) && isValidCidrs(draft.svcCidrs))
-const poolNameOk = computed(() => !draft.pool.name || /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(draft.pool.name))
-const specsOk = computed(() => draft.specs.every((s) => s.zones.length > 0))
-const IMAGES = [
-  { id: 'ubuntu-22.04', name: 'Ubuntu 22.04' },
-  { id: 'debian-12', name: 'Debian 12' },
-]
-const passwordOk = computed(
-  () =>
-    draft.pool.loginMode !== 'password' ||
-    (draft.pool.password.length >= 8 && draft.pool.password === draft.pool.passwordConfirm)
-)
-const canCreate = computed(
-  () => nameOk.value && subnetOk.value && cidrsOk.value && poolNameOk.value && specsOk.value && masterAzsOk.value && passwordOk.value && nodeLabelOk.value && taintsOk.value && userDataOk.value
-)
 
-const price = computed(() =>
-  monthlyPrice({
-    cp: { plan: draft.cp.plan },
-    pool: draft.specs.length ? { count: draft.specs.length, specs: draft.specs } : null,
-  })
-)
+/* ---------------- pool validation (same rules as the stepper) ---------------- */
+const POOL_NAME = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/
+const K8S_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?(\/[a-z0-9]([a-z0-9-.]*[a-z0-9])?)?$/
+const K8S_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
+
+function poolNameOf(p, i) {
+  return p.name || `node-pool-${i + 1}`
+}
+function poolOk(p, i, all) {
+  const nm = poolNameOf(p, i)
+  if (!POOL_NAME.test(nm)) return false
+  /* effective names must be unique across pools */
+  if (all.some((o, j) => j !== i && poolNameOf(o, j) === nm)) return false
+  if (p.specs.length !== 1 || !p.specs[0].zones.length) return false
+  if (!(Number.isInteger(p.count) && p.count >= 1 && p.count <= 20)) return false
+  if (p.loginMode === 'keypair') {
+    if (!KEY_PAIRS.some((k) => k.id === p.keyPairId)) return false
+  } else {
+    if (p.password.length < 8 || p.password !== p.passwordConfirm) return false
+  }
+  if (!p.labels.every((l) => {
+    const [k, v] = l.split('=')
+    return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
+  })) return false
+  if (!p.taints.every((t) => K8S_KEY.test(t.key) && (t.value === '' || K8S_VAL.test(t.value)))) return false
+  if (p.userData.length > 16000) return false
+  return true
+}
+const poolStates = computed(() => draft.pools.map((p, i) => poolOk(p, i, draft.pools)))
+const poolsOk = computed(() => poolStates.value.every(Boolean))
+const canCreate = computed(() => nameOk.value && subnetOk.value && cidrsOk.value && masterAzsOk.value && poolsOk.value)
+
+/* ---------------- price (sum over pools) ---------------- */
+const price = computed(() => {
+  const cpCost = (CP_PLANS.find((p) => p.id === draft.cp.plan)?.pricePerDay || 0) * 30
+  let nodesCost = 0
+  let volumeCost = 0
+  for (const p of draft.pools) {
+    const f = FLAVOR_CATALOG.find((x) => x.id === p.specs[0]?.flavorId)
+    if (!f) continue
+    nodesCost += Math.round(f.pricePerHour * 730) * p.count
+    volumeCost += VOLUME_PRICE_PER_GB * 50 * p.count
+  }
+  const total = cpCost + nodesCost + volumeCost
+  return {
+    cpCost,
+    nodesCost,
+    volumeCost,
+    total,
+    hourly: Math.max(1_000, Math.round(total / 730 / 1_000) * 1_000),
+  }
+})
 
 /* rail helpers */
 const railZones = computed(() =>
@@ -129,88 +193,7 @@ function removeLabel(l) {
   draft.labels = draft.labels.filter((x) => x !== l)
 }
 
-/* node pool labels / taints / startup script */
-const K8S_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?(\/[a-z0-9]([a-z0-9-.]*[a-z0-9])?)?$/
-const K8S_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
-const nodeLabelInput = ref('')
-const nodeLabelOk = computed(() => draft.pool.labels.every((l) => {
-  const [k, v] = l.split('=')
-  return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
-}))
-function addNodeLabel() {
-  const v = nodeLabelInput.value.trim().replace(/\s+/g, '')
-  if (v && v.includes('=') && !draft.pool.labels.includes(v) && draft.pool.labels.length < 20) draft.pool.labels.push(v)
-  nodeLabelInput.value = ''
-}
-function removeNodeLabel(l) {
-  draft.pool.labels = draft.pool.labels.filter((x) => x !== l)
-}
-function addTaint() {
-  draft.pool.taints.push({ key: '', value: '', effect: 'NoSchedule' })
-}
-function removeTaint(t) {
-  draft.pool.taints = draft.pool.taints.filter((x) => x !== t)
-}
-const taintsOk = computed(() =>
-  draft.pool.taints.every((t) => K8S_KEY.test(t.key) && (t.value === '' || K8S_VAL.test(t.value)))
-)
-const userDataOk = computed(() => !draft.pool.userData || draft.pool.userData.length <= 16000)
-
-/* ---------------- flavor catalog ---------------- */
-const fCat = ref('Basic')
-const fVcpu = ref('')
-const fMem = ref('')
-const fAz = ref('')
-const page = ref(1)
-const perPage = ref(5)
-
-const vcpuOptions = [...new Set(FLAVOR_CATALOG.map((f) => f.vcpu))].sort((a, b) => a - b)
-const memOptions = [...new Set(FLAVOR_CATALOG.map((f) => f.ram))].sort((a, b) => a - b)
-
-const filteredFlavors = computed(() =>
-  FLAVOR_CATALOG.filter((f) => {
-    if (f.category !== fCat.value) return false
-    if (fVcpu.value !== '' && f.vcpu !== +fVcpu.value) return false
-    if (fMem.value !== '' && f.ram !== +fMem.value) return false
-    // values arrive as strings from ArSelectMenu — comparisons above already coerce with +
-    if (fAz.value !== '' && !f.azs.some((z) => z.id === fAz.value && !z.soldOut)) return false
-    return true
-  })
-)
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredFlavors.value.length / perPage.value)))
-const pagedFlavors = computed(() =>
-  filteredFlavors.value.slice((page.value - 1) * perPage.value, page.value * perPage.value)
-)
-watch([fCat, fVcpu, fMem, fAz], () => { page.value = 1 })
-
-const pageNumbers = computed(() => Array.from({ length: totalPages.value }, (_, i) => i + 1))
-
 const zoneName = (id) => REGION.zones.find((z) => z.id === id)?.name || id
-const azCell = (f) =>
-  f.azs.map((z) => (z.soldOut ? `${zoneName(z.id)} (Sold out)` : zoneName(z.id))).join(' | ')
-const availableZones = (f) => f.azs.filter((z) => !z.soldOut).map((z) => z.id)
-const allZonesSoldOut = (f) => f.azs.every((z) => z.soldOut)
-
-/* selected spec — single choice: picking a flavor replaces the previous one */
-function toggleFlavor(f) {
-  const i = draft.specs.findIndex((s) => s.flavorId === f.id)
-  if (i >= 0) draft.specs.splice(i, 1)
-  else {
-    draft.specs = [{ flavorId: f.id, zones: availableZones(f) }]
-  }
-}
-function specToggleZone(spec, zoneId, f) {
-  if (f.azs.find((z) => z.id === zoneId)?.soldOut) return
-  const i = spec.zones.indexOf(zoneId)
-  i >= 0 ? spec.zones.splice(i, 1) : spec.zones.push(zoneId)
-}
-function removeSpec(spec) {
-  draft.specs = draft.specs.filter((s) => s.flavorId !== spec.flavorId)
-}
-function specSelected(f) {
-  return draft.specs.some((s) => s.flavorId === f.id)
-}
-/* header cell: with single-select there is no select-all; keep the cell empty */
 
 /* ---------------- create ---------------- */
 const creating = ref(false)
@@ -229,16 +212,18 @@ function create() {
       securityGroups: ['Default'],
       podCidr: cidrStr(draft.podCidrs[0]),
       svcCidr: cidrStr(draft.svcCidrs[0]),
-      pool: draft.specs.length
-        ? {
-            name: draft.pool.name || 'node-pool-1',
-            count: draft.specs.length,
-            specs: JSON.parse(JSON.stringify(draft.specs)),
-            labels: [...draft.pool.labels],
-            taints: draft.pool.taints.filter((t) => t.key).map((t) => ({ ...t })),
-            userData: draft.pool.userData,
-          }
-        : null,
+      /* one entry per pool — store.createCluster accepts a pools array */
+      pools: draft.pools.map((p, i) => ({
+        name: poolNameOf(p, i),
+        count: p.count,
+        specs: JSON.parse(JSON.stringify(p.specs)),
+        loginMode: p.loginMode,
+        ...(p.loginMode === 'keypair' ? { keyPairId: p.keyPairId } : {}),
+        image: p.image,
+        labels: [...p.labels],
+        taints: p.taints.filter((t) => t.key).map((t) => ({ ...t })),
+        userData: p.userData,
+      })),
     })
     creating.value = false
     store.toast('info', 'Creating cluster', `${cluster.name} is being created — this usually takes a few minutes.`)
@@ -255,6 +240,9 @@ function create() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg>
         </router-link>
         <h1 class="text-title-2" style="margin: 0">Create Kubernetes Cluster</h1>
+        <router-link :to="{ path: '/clusters/create', query: { flow: 'stepper' } }" class="flow-link">
+          Try the two-step flow
+        </router-link>
       </div>
     </div>
 
@@ -571,323 +559,40 @@ function create() {
           </div>
         </div>
 
-        <!-- ================= NODE POOL ================= -->
+        <!-- ================= NODE POOLS ================= -->
         <div class="ar-card sect">
           <div class="sect-head">
-            <h3 class="text-title-3" style="margin: 0">Node Pool</h3>
-            <p class="text-body-2 muted" style="margin: 2px 0 0">Configure a group of nodes for your cluster. Optional — you can add pools after creation.</p>
+            <h3 class="text-title-3" style="margin: 0">Node Pools</h3>
+            <p class="text-body-2 muted" style="margin: 2px 0 0">
+              Configure up to 3 groups of nodes. Pools are optional — you can also add them after creation.
+            </p>
           </div>
 
-          <div style="display: flex; flex-direction: column; gap: var(--space-4)">
-            <div style="display: flex; gap: var(--space-4); flex-wrap: wrap">
-              <div class="ar-field" style="flex: 1; min-width: 220px; max-width: 360px">
-                <label>Pool Name</label>
-                <div class="ar-input" :class="{ 'error-mode': draft.pool.name && !poolNameOk }">
-                  <input v-model="draft.pool.name" placeholder="Enter a name" spellcheck="false" style="text-transform: lowercase" />
-                </div>
-                <span v-if="draft.pool.name && !poolNameOk" class="error-text">Lowercase letters, digits and dashes. 3–40 characters.</span>
-              </div>
+          <div class="pool-list">
+            <PoolCard
+              v-for="(p, i) in draft.pools"
+              :key="p.id"
+              :pool="p"
+              :index="i"
+              :open="openId === p.id"
+              :ok="poolStates[i]"
+              @toggle="togglePool(p.id)"
+              @remove="removePool(p.id)"
+            />
+
+            <div v-if="!draft.pools.length" class="banner info">
+              <svg style="flex:none" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
+              <span>No node pools — the cluster will be created without worker nodes. You can add pools after creation from the cluster page.</span>
             </div>
 
-            <!-- flavor filters -->
-            <div class="flavor-filter">
-              <div class="ar-field" style="width: 130px">
-                <label>vCPUs</label>
-                <ArSelectMenu
-                  v-model="fVcpu"
-                  :options="[{ value: '', label: 'All' }, ...vcpuOptions.map((v) => ({ value: String(v), label: String(v) }))]"
-                  aria-label="vCPUs"
-                />
-              </div>
-              <div class="ar-field" style="width: 130px">
-                <label>Memory</label>
-                <ArSelectMenu
-                  v-model="fMem"
-                  :options="[{ value: '', label: 'All' }, ...memOptions.map((m) => ({ value: String(m), label: String(m) }))]"
-                  aria-label="Memory"
-                />
-              </div>
-              <div class="ar-field" style="width: 150px">
-                <label>AZ</label>
-                <ArSelectMenu
-                  v-model="fAz"
-                  :options="[{ value: '', label: 'All' }, ...REGION.zones.map((z) => ({ value: z.id, label: z.name }))]"
-                  aria-label="AZ"
-                />
-              </div>
+            <div style="display: flex; align-items: center; gap: var(--space-4)">
+              <button class="add-pool" :disabled="draft.pools.length >= 3" @click="addPool">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
+                Add node pool
+              </button>
+              <span v-if="draft.pools.length >= 3" class="hint">Maximum of 3 node pools per cluster.</span>
+              <span v-else-if="draft.pools.length > 1" class="hint">New pools start with the same credentials as node-pool-1.</span>
             </div>
-
-            <div class="pill-tabs">
-              <button
-                v-for="c in FLAVOR_CATEGORIES"
-                :key="c"
-                :class="{ on: fCat === c }"
-                @click="fCat = c"
-              >{{ c }}</button>
-            </div>
-
-            <!-- flavor table -->
-            <div class="table-scroll">
-              <table class="ar-table flavor-table">
-                <thead>
-                  <tr>
-                    <th style="width: 36px"></th>
-                    <th>Flavor</th>
-                    <th>AZ</th>
-                    <th>vCPUs / Memory</th>
-                    <th>Port Speed</th>
-                    <th>Packets Per Second</th>
-                    <th>Max. Pods</th>
-                    <th>Pricing</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="f in pagedFlavors"
-                    :key="f.id"
-                    class="selectable"
-                    :class="{ selected: specSelected(f), 'sold-out': allZonesSoldOut(f) }"
-                    @click="!allZonesSoldOut(f) && toggleFlavor(f)"
-                  >
-                    <td @click.stop>
-                      <ArRadioDot
-                        :model-value="specSelected(f)"
-                        :disabled="allZonesSoldOut(f)"
-                        @update:model-value="toggleFlavor(f)"
-                      />
-                    </td>
-                    <td class="mono cell-main">{{ f.id }}</td>
-                    <td class="text-body-2" :class="{ muted: f.azs.some((z) => z.soldOut) }">{{ azCell(f) }}</td>
-                    <td class="text-body-2">{{ f.vcpu }} vCPUs / {{ f.ram }} GiB</td>
-                    <td class="text-body-2 muted">{{ f.bandwidth.split(' / ').pop() }}</td>
-                    <td class="text-body-2 muted">{{ f.pps }} pps</td>
-                    <td class="text-body-2">{{ f.maxPods }}</td>
-                    <td class="text-body-2-strong">{{ fmtIRR(f.pricePerHour) }} IRR/hour</td>
-                  </tr>
-                  <tr v-if="!pagedFlavors.length">
-                    <td colspan="8" class="text-body-2 muted" style="text-align: center; padding: var(--space-6)">No flavors match the current filters.</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; align-items: center">
-              <span class="text-caption-1 muted">
-                Showing {{ filteredFlavors.length ? (page - 1) * perPage + 1 : 0 }}–{{ Math.min(page * perPage, filteredFlavors.length) }} of {{ filteredFlavors.length }}
-              </span>
-              <div style="display: flex; align-items: center; gap: var(--space-4)">
-                <label class="check-line" style="gap: var(--space-2)">
-                  Per page
-                  <ArSelectMenu
-                    class="per-page-menu"
-                    v-model="perPage"
-                    :options="[{ value: 5, label: '5' }, { value: 10, label: '10' }, { value: 20, label: '20' }]"
-                    aria-label="Rows per page"
-                    @update:model-value="page = 1"
-                  />
-                </label>
-                <nav class="ar-pagination" aria-label="Flavor pagination">
-                  <button class="ar-page" :disabled="page <= 1" @click="page--">‹</button>
-                  <button
-                    v-for="n in pageNumbers"
-                    :key="n"
-                    class="ar-page"
-                    :class="{ current: n === page }"
-                    @click="page = n"
-                  >{{ n }}</button>
-                  <button class="ar-page" :disabled="page >= totalPages" @click="page++">›</button>
-                </nav>
-              </div>
-            </div>
-
-            <!-- login mode (required) -->
-            <div class="ar-field" style="max-width: 640px">
-              <span class="ar-field-label">Login Mode<span class="req">*</span></span>
-              <div class="dist-rows">
-                <div class="dist-row">
-                  <div class="seg dist-seg">
-                    <button :class="{ on: draft.pool.loginMode === 'password' }" @click="draft.pool.loginMode = 'password'">Password</button>
-                    <button :class="{ on: draft.pool.loginMode === 'keypair' }" @click="draft.pool.loginMode = 'keypair'">Key Pair</button>
-                  </div>
-                </div>
-                <template v-if="draft.pool.loginMode === 'password'">
-                  <div class="dist-row" style="flex-wrap: nowrap">
-                    <span class="dist-k" style="width: 90px">Username</span>
-                    <span class="text-body-2-strong">root</span>
-                  </div>
-                  <div class="dist-row" style="flex-wrap: nowrap">
-                    <span class="dist-k" style="width: 90px">Password</span>
-                    <div class="ar-input" style="flex: 1; max-width: 250px" :class="{ 'error-mode': draft.pool.password && draft.pool.password.length < 8 }">
-                      <input v-model="draft.pool.password" type="password" placeholder="Enter a password." autocomplete="new-password" />
-                    </div>
-                    <div class="ar-input" style="flex: 1; max-width: 250px" :class="{ 'error-mode': draft.pool.passwordConfirm && draft.pool.passwordConfirm !== draft.pool.password }">
-                      <input v-model="draft.pool.passwordConfirm" type="password" placeholder="Confirm the password." autocomplete="new-password" />
-                    </div>
-                  </div>
-                  <span v-if="draft.pool.password && draft.pool.password.length < 8" class="error-text">Password must be at least 8 characters.</span>
-                  <span v-else-if="draft.pool.passwordConfirm && draft.pool.passwordConfirm !== draft.pool.password" class="error-text">Passwords do not match.</span>
-                  <p class="scale-note muted">The password is used to log in to the nodes of this pool over SSH.</p>
-                </template>
-                <p v-else class="scale-note muted">Choose an SSH key pair from your project after the cluster is created.</p>
-              </div>
-            </div>
-
-            <!-- advanced settings (optional) -->
-            <button class="adv-toggle" @click="advOpen = !advOpen">
-              Advanced Settings (Optional)
-              <svg class="chev" :style="{ transform: advOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 6.5 4 4 4-4"/></svg>
-            </button>
-
-            <div v-if="advOpen" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5)">
-              <!-- OS -->
-              <div class="dist-row" style="align-items: flex-start">
-                <span class="dist-k" style="margin-top: 6px">OS</span>
-                <div style="display: flex; flex-direction: column; gap: var(--space-3)">
-                  <div class="seg">
-                    <button :class="{ on: poolImageTab === 'public' }" @click="poolImageTab = 'public'">Public image</button>
-                    <button :class="{ on: poolImageTab === 'private' }" @click="poolImageTab = 'private'">Private image</button>
-                  </div>
-                  <div v-if="poolImageTab === 'public'" class="chip-row">
-                    <button
-                      v-for="img in IMAGES"
-                      :key="img.id"
-                      class="os-card"
-                      :class="{ on: draft.pool.image === img.id }"
-                      @click="draft.pool.image = img.id"
-                    >
-                      <span class="os-logo" :class="img.id.startsWith('ubuntu') ? 'os-ubuntu' : 'os-debian'">
-                        <svg v-if="img.id.startsWith('ubuntu')" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="7.5" cy="12" r="1.6"/><circle cx="14" cy="7.5" r="1.6"/><circle cx="14" cy="16.5" r="1.6"/></svg>
-                        <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a9 9 0 1 0 9 9c0-.6 0-1.2-.2-1.8A5 5 0 0 1 13 4.2 9 9 0 0 0 12 3Z"/><path d="M8 12.5c1.8 0 3.2-1.4 3.2-3.2"/></svg>
-                      </span>
-                      {{ img.name }}
-                    </button>
-                  </div>
-                  <p v-else class="scale-note muted">Private images are not available yet.</p>
-                </div>
-              </div>
-
-              <!-- Node labels -->
-              <div class="dist-row" style="align-items: flex-start">
-                <span class="dist-k" style="margin-top: 6px">Node Labels</span>
-                <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-2); max-width: 560px">
-                  <div class="tagbox">
-                    <span v-for="l in draft.pool.labels" :key="l" class="ar-tag mono">
-                      {{ l }}
-                      <button class="tag-x" aria-label="Remove label" @click="removeNodeLabel(l)">
-                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
-                      </button>
-                    </span>
-                    <input
-                      v-model="nodeLabelInput"
-                      placeholder="key=value"
-                      spellcheck="false"
-                      @keydown.enter.prevent="addNodeLabel"
-                    />
-                  </div>
-                  <span v-if="nodeLabelInput && !nodeLabelOk" class="error-text">Use key=value — lowercase keys (letters, digits, -, .), values up to 63 characters.</span>
-                  <span v-else class="hint">Applied as Kubernetes labels to every node of this pool. Press Enter after each label. Up to 20.</span>
-                </div>
-              </div>
-
-              <!-- Taints -->
-              <div class="dist-row" style="align-items: flex-start">
-                <span class="dist-k" style="margin-top: 6px">Taints</span>
-                <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-3); max-width: 560px">
-                  <div v-for="(t, i) in draft.pool.taints" :key="i" class="dist-row" style="flex-wrap: nowrap; gap: var(--space-2)">
-                    <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.key && !K8S_KEY.test(t.key) }">
-                      <input v-model="t.key" placeholder="Key" spellcheck="false" style="text-transform: lowercase" />
-                    </div>
-                    <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.value && !K8S_VAL.test(t.value) }">
-                      <input v-model="t.value" placeholder="Value" spellcheck="false" />
-                    </div>
-                    <ArSelectMenu
-                      class="taint-effect"
-                      v-model="t.effect"
-                      :options="['NoSchedule', 'PreferNoSchedule', 'NoExecute']"
-                      aria-label="Taint effect"
-                    />
-                    <button class="taint-x" aria-label="Remove taint" @click="removeTaint(t)">
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 4 8 8M12 4l-8 8"/></svg>
-                    </button>
-                  </div>
-                  <button class="link-btn" @click="addTaint">
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
-                    Add taint
-                  </button>
-                  <span v-if="draft.pool.taints.length && !taintsOk" class="error-text">Taint keys must be lowercase (letters, digits, -, .). Value is optional.</span>
-                  <span v-else class="hint">Tainted nodes repel pods that do not tolerate the taint. Value is optional.</span>
-                </div>
-              </div>
-
-              <!-- Startup script -->
-              <div class="dist-row" style="align-items: flex-start">
-                <span class="dist-k" style="margin-top: 6px">Startup Script</span>
-                <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-2); max-width: 560px">
-                  <div class="ar-input textarea" :class="{ 'error-mode': draft.pool.userData.length > 16000 }">
-                    <textarea
-                      v-model="draft.pool.userData"
-                      rows="5"
-                      placeholder="#!/bin/bash"
-                      spellcheck="false"
-                      style="font-family: var(--font-mono, monospace); font-size: 12px"
-                    ></textarea>
-                  </div>
-                  <span class="hint">A cloud-init user-data script that runs on every node of this pool at first boot. Maximum 16 KB.</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- selected specification (single) -->
-            <div v-if="draft.specs.length" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md); padding: var(--space-4) var(--space-6) var(--space-6)">
-              <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Selected Specification</h4>
-              <div class="banner info" style="margin-bottom: var(--space-4); align-items: flex-start">
-                <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
-                <ol style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px">
-                  <li>Only one flavor can be selected per node pool — picking another flavor replaces the current one.</li>
-                  <li>Choose the availability zones where the nodes of this flavor should be provisioned.</li>
-                </ol>
-              </div>
-              <div class="table-scroll">
-                <table class="ar-table">
-                  <thead>
-                    <tr><th>Specifications</th><th>Pricing</th><th style="width: 40%">AZ</th><th style="width: 90px">Operation</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="spec in draft.specs" :key="spec.flavorId">
-                      <td class="text-body-2-strong">
-                        {{ FLAVOR_CATALOG.find((f) => f.id === spec.flavorId)?.category }} /
-                        <span class="mono">{{ spec.flavorId }}</span> ·
-                        {{ FLAVOR_CATALOG.find((f) => f.id === spec.flavorId)?.vcpu }} vCPUs /
-                        {{ FLAVOR_CATALOG.find((f) => f.id === spec.flavorId)?.ram }} GiB
-                      </td>
-                      <td class="text-body-2">{{ fmtIRR(FLAVOR_CATALOG.find((f) => f.id === spec.flavorId)?.pricePerHour) }} IRR/hour</td>
-                      <td>
-                        <div class="chip-row">
-                          <label
-                            v-for="z in FLAVOR_CATALOG.find((f) => f.id === spec.flavorId)?.azs"
-                            :key="z.id"
-                            class="check-line"
-                            :style="z.soldOut ? 'opacity:.5' : ''"
-                          >
-                            <ArCheckbox
-                              :model-value="spec.zones.includes(z.id)"
-                              :disabled="z.soldOut"
-                              @update:model-value="specToggleZone(spec, z.id, FLAVOR_CATALOG.find((f) => f.id === spec.flavorId))"
-                            />
-                            {{ z.soldOut ? `${zoneName(z.id)} (Sold out)` : zoneName(z.id) }}
-                          </label>
-                        </div>
-                      </td>
-                      <td><button class="link-danger" @click="removeSpec(spec)">Delete</button></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <span v-if="draft.specs.some((s) => !s.zones.length)" class="error-text">
-              Select at least one availability zone for every selected flavor.
-            </span>
           </div>
         </div>
 
@@ -966,15 +671,20 @@ function create() {
           </div>
 
           <div class="rail-group">
-            <h4>Node Pool</h4>
+            <h4>Node Pools ({{ draft.pools.length }}/3)</h4>
             <div class="rail-text">
-              <p>Pool Name: {{ draft.pool.name || (draft.specs.length ? 'node-pool-1' : '—') }}</p>
-              <p>Flavors: {{ draft.specs.length ? draft.specs.map((s) => s.flavorId).join(', ') : '—' }}</p>
-              <p v-if="draft.specs.length">Availability Zone: {{ [...new Set(draft.specs.flatMap((s) => s.zones))].map(zoneName).join(', ') || '—' }}</p>
-              <p>Login: {{ draft.pool.loginMode === 'password' ? 'Password' : 'Key Pair' }}</p>
-              <p v-if="draft.pool.labels.length || draft.pool.taints.length">
-                Labels/Taints: {{ draft.pool.labels.length }} label{{ draft.pool.labels.length === 1 ? '' : 's' }} · {{ draft.pool.taints.length }} taint{{ draft.pool.taints.length === 1 ? '' : 's' }}
-              </p>
+              <template v-if="draft.pools.length">
+                <p v-for="(p, i) in draft.pools" :key="p.id">
+                  {{ poolNameOf(p, i) }} · {{ p.specs[0]?.flavorId || 'no flavor' }} × {{ p.count || '—' }}
+                  <span v-if="!poolStates[i]" class="rail-err">· incomplete</span>
+                </p>
+                <p>Login:
+                  <template v-for="(p, i) in draft.pools" :key="p.id">
+                    {{ i ? ' | ' : ' ' }}{{ p.loginMode === 'password' ? 'Password' : `Key Pair${p.keyPairId ? ` · ${KEY_PAIRS.find((k) => k.id === p.keyPairId)?.name}` : ''}` }}
+                  </template>
+                </p>
+              </template>
+              <p v-else>No node pools configured.</p>
             </div>
           </div>
 
@@ -993,10 +703,7 @@ function create() {
             Create Kubernetes Cluster
           </ArButton>
           <p v-if="!canCreate" class="text-caption-1 muted" style="margin: var(--space-2) 0 0; text-align: center">
-            Complete name, subnets, CIDRs, login credentials{{ draft.specs.length ? ' and AZ selection' : '' }} to enable creation.
-          </p>
-          <p v-else-if="!nodeLabelOk || !taintsOk" class="error-text" style="margin: var(--space-2) 0 0; text-align: center">
-            Fix invalid node labels or taints in Advanced Settings to enable creation.
+            Complete the cluster settings and every node pool card to enable creation.
           </p>
         </div>
       </aside>
@@ -1006,6 +713,11 @@ function create() {
 
 <style scoped>
 .page-wide { max-width: 1280px; }
+.flow-link {
+  margin-left: auto; font-size: 13px; font-weight: 450;
+  color: var(--fg-primary-t1-1-default); text-decoration: none;
+}
+.flow-link:hover { text-decoration: underline; }
 .sect { padding: var(--space-6); }
 .sect-head {
   padding-bottom: var(--space-4);
@@ -1013,17 +725,18 @@ function create() {
   border-bottom: 1px solid var(--st-neutral-t1-1-default);
 }
 .net-block { padding-top: var(--space-2); }
-.check-line {
-  display: inline-flex; align-items: center; gap: var(--space-2);
-  font-size: 13px; color: var(--fg-neutral-t1-2-default); cursor: pointer;
-}
-.flavor-filter { display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end; }
-.flavor-filter .check-line { white-space: nowrap; }
-.link-danger {
-  border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 450;
-  color: var(--fg-primary-t1-1-default); padding: 0;
-}
-.link-danger:hover { text-decoration: underline; }
 .cidr-cap { color: var(--fg-error-t1-1-default); font-weight: 450; }
-.flavor-table tbody tr.sold-out td { color: var(--fg-neutral-t1-3-default); }
+
+/* pool accordion list — same as the stepper flow */
+.pool-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.add-pool {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px dashed var(--st-primary-t1-1-default); border-radius: var(--radius-md);
+  background: var(--bg-primary-t3-1-default); color: var(--fg-primary-t1-1-default);
+  font: inherit; font-size: 13.5px; font-weight: 450;
+  padding: 10px 18px; cursor: pointer;
+}
+.add-pool:hover:not(:disabled) { background: var(--bg-primary-t2-1-default, var(--bg-primary-t3-1-default)); }
+.add-pool:disabled { opacity: .5; cursor: not-allowed; }
+.rail-err { color: var(--fg-error-t1-1-default); }
 </style>

@@ -104,6 +104,13 @@ export const VPCS = [
 
 export const FIREWALL_GROUPS = ['Default', 'Internal Traffic', 'Web Traffic', 'SSH Restricted']
 
+/* Project SSH keys shown by the create-cluster credential selector. */
+export const KEY_PAIRS = [
+  { id: 'kp-fea4', name: 'KeyPair-fea4' },
+  { id: 'kp-prod1', name: 'production-admin' },
+  { id: 'kp-dev02', name: 'development-team' },
+]
+
 /* Day-1 platform components — bundled, not user-manageable addons
    (addons management ships in a later phase) */
 export const INCLUDED_COMPONENTS = [

@@ -11,6 +11,9 @@ const props = defineProps({
   modelValue: { type: [String, Number], default: '' },
   disabled: Boolean,
   ariaLabel: String,
+  searchable: Boolean,
+  searchPlaceholder: { type: String, default: 'Search…' },
+  emptyText: { type: String, default: 'No results found' },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -18,6 +21,15 @@ const norm = computed(() =>
   props.options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }))
 )
 const current = computed(() => norm.value.find((o) => o.value === props.modelValue))
+const search = ref('')
+const searchInput = ref(null)
+const visibleOptions = computed(() => props.searchable
+  ? norm.value.filter((o) => o.value !== '' && o.label.toLowerCase().includes(search.value.trim().toLowerCase()))
+  : norm.value)
+function onSearch() {
+  activeIdx.value = -1
+  nextTick(place)
+}
 
 const open = ref(false)
 const root = ref(null)
@@ -37,7 +49,7 @@ function place() {
   const r = el.getBoundingClientRect()
   const vh = viewportHeight()
   const spaceBelow = vh - r.bottom
-  const estHeight = Math.min(300, norm.value.length * 40 + 12)
+  const estHeight = Math.min(300, Math.max(1, visibleOptions.value.length) * 40 + 12 + (props.searchable ? 38 : 0))
   dropUp.value = spaceBelow < estHeight + 12 && r.top > estHeight + 12
   pos.value = {
     left: r.left,
@@ -51,17 +63,20 @@ function place() {
 function pick(opt) {
   emit('update:modelValue', opt.value)
   open.value = false
+  root.value?.querySelector('.asm-trigger')?.focus()
 }
 function toggle() {
   if (props.disabled) return
   open.value = !open.value
   if (open.value) {
-    activeIdx.value = norm.value.findIndex((o) => o.value === props.modelValue)
+    search.value = ''
+    activeIdx.value = visibleOptions.value.findIndex((o) => o.value === props.modelValue)
     nextTick(() => {
       place()
       // keep the selected option in view
       const sel = pop.value?.querySelector('.asm-opt.sel')
       sel?.scrollIntoView({ block: 'nearest' })
+      searchInput.value?.focus({ preventScroll: true })
     })
   }
 }
@@ -77,15 +92,20 @@ function onKey(e) {
     }
     return
   }
-  if (e.key === 'Escape') open.value = false
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    open.value = false
+    root.value?.querySelector('.asm-trigger')?.focus()
+  }
+  if (e.key === 'Tab') open.value = false
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault()
     const dir = e.key === 'ArrowDown' ? 1 : -1
-    activeIdx.value = Math.min(norm.value.length - 1, Math.max(0, activeIdx.value + dir))
+    activeIdx.value = Math.min(visibleOptions.value.length - 1, Math.max(0, activeIdx.value + dir))
   }
   if (e.key === 'Enter') {
     e.preventDefault()
-    if (norm.value[activeIdx.value]) pick(norm.value[activeIdx.value])
+    if (visibleOptions.value[activeIdx.value]) pick(visibleOptions.value[activeIdx.value])
   }
 }
 function onReposition() {
@@ -117,8 +137,20 @@ onBeforeUnmount(() => {
         :class="{ up: dropUp }"
         :style="{ left: pos.left + 'px', minWidth: pos.minWidth + 'px', ...(dropUp ? { bottom: pos.bottom + 'px' } : { top: pos.top + 'px' }) }"
       >
+        <input
+          v-if="searchable"
+          ref="searchInput"
+          v-model="search"
+          class="asm-search"
+          type="search"
+          :placeholder="searchPlaceholder"
+          aria-label="Search options"
+          @click.stop
+          @keydown.stop="onKey"
+          @input="onSearch"
+        />
         <button
-          v-for="(o, i) in norm"
+          v-for="(o, i) in visibleOptions"
           :key="o.value"
           type="button"
           class="asm-opt"
@@ -126,6 +158,7 @@ onBeforeUnmount(() => {
           @click="pick(o)"
           @mousemove="activeIdx = i"
         >{{ o.label }}</button>
+        <span v-if="searchable && !visibleOptions.length" class="asm-empty">{{ emptyText }}</span>
       </div>
     </Teleport>
   </div>
@@ -166,12 +199,19 @@ onBeforeUnmount(() => {
 }
 .asm-pop.up { transform-origin: bottom center; }
 @keyframes asmIn { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+.asm-search {
+  display: block; width: 100%; height: 34px; padding: 0 10px;
+  margin: 0 0 4px; border: 0; border-bottom: 1px solid var(--st-neutral-t1-1-default);
+  outline: 0; background: transparent; color: var(--fg-neutral-t1-1-default); font: inherit; font-size: 13px;
+}
+.asm-search:focus { border-bottom-color: var(--st-primary-t1-1-default); }
 .asm-opt {
   display: flex; align-items: center; width: 100%;
   border: 0; background: none; cursor: pointer; text-align: left;
   font: inherit; font-size: 14px; color: var(--fg-neutral-t1-1-default);
   padding: 9px 12px; border-radius: var(--radius-md);
 }
+.asm-empty { display: block; padding: 10px 12px; color: var(--fg-neutral-t1-3-default); font-size: 13px; }
 .asm-opt.act { background: var(--bg-neutral-t1-4-default); }
 .asm-opt.sel { color: var(--fg-primary-t1-1-default); font-weight: 450; background: var(--bg-primary-t3-1-default); }
 .asm-opt.sel::after {

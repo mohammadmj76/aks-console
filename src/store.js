@@ -28,30 +28,39 @@ export const store = reactive({
     return this.clusters.find((c) => c.id === id)
   },
 
-  /* draft comes from the single-page create form */
+  /* draft comes from the single-page create form (pool + specs)
+     or the two-step stepper variant (pools array) */
   createCluster(draft) {
     const ver = VERSIONS.find((v) => v.id === draft.version)
     const zoneOf = {}
     for (const v of VPCS_SAFE) for (const s of v.subnets) zoneOf[s.id] = s.zone
     const zones = [...new Set(draft.subnetIds.map((id) => zoneOf[id]).filter(Boolean))]
 
-    const poolDraft = draft.pool
-    const pools = poolDraft?.specs?.length
-      ? [{
-          id: 'pool-' + nextId(),
-          name: poolDraft.name || 'node-pool-1',
-          count: poolDraft.count || 1,
-          specs: poolDraft.specs.map((s) => ({ flavorId: s.flavorId, zones: [...s.zones] })),
-          zones,
-          subnets: [...draft.subnetIds],
-          volumeGb: 50,
-          image: poolDraft.image || 'ubuntu-22.04',
-          createdAt: new Date().toISOString(),
-          labels: [...(poolDraft.labels || [])],
-          taints: (poolDraft.taints || []).filter((t) => t.key).map((t) => ({ ...t })),
-          userData: poolDraft.userData || '',
-        }]
-      : []
+    const poolDrafts = Array.isArray(draft.pools)
+      ? draft.pools
+      : draft.pool?.specs?.length
+        ? [draft.pool]
+        : []
+    const pools = poolDrafts.map((poolDraft) => {
+      /* pool zones come from the flavor selection; fall back to subnet zones */
+      const specZones = [...new Set((poolDraft.specs || []).flatMap((s) => s.zones || []))]
+      return {
+        id: 'pool-' + nextId(),
+        name: poolDraft.name || 'node-pool-1',
+        count: poolDraft.count || 1,
+        specs: (poolDraft.specs || []).map((s) => ({ flavorId: s.flavorId, zones: [...s.zones] })),
+        zones: specZones.length ? specZones : zones,
+        subnets: [...draft.subnetIds],
+        volumeGb: 50,
+        image: poolDraft.image || 'ubuntu-22.04',
+        loginMode: poolDraft.loginMode || 'password',
+        ...(poolDraft.loginMode === 'keypair' ? { keyPairId: poolDraft.keyPairId } : {}),
+        createdAt: new Date().toISOString(),
+        labels: [...(poolDraft.labels || [])],
+        taints: (poolDraft.taints || []).filter((t) => t.key).map((t) => ({ ...t })),
+        userData: poolDraft.userData || '',
+      }
+    })
 
     const cluster = {
       id: 'aks-' + draft.name.replace(/[^a-z0-9]/g, '').slice(0, 10) + nextId(),
@@ -81,8 +90,8 @@ export const store = reactive({
     this.events[cluster.id] = [
       { ts: timeNow(), type: 'Normal', reason: 'ClusterCreateStarted', msg: `Provisioning dedicated control plane (${cpPlanName(cluster)})` },
     ]
-    if (pools.length) {
-      this.events[cluster.id].push({ ts: timeNow(), type: 'Normal', reason: 'NodePoolCreated', msg: `Node pool ${pools[0].name} created (${pools[0].count} nodes)` })
+    for (const p of pools) {
+      this.events[cluster.id].push({ ts: timeNow(), type: 'Normal', reason: 'NodePoolCreated', msg: `Node pool ${p.name} created (${p.count} nodes)` })
     }
     this.simulateProvisioning(cluster)
     return cluster
