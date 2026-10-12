@@ -13,6 +13,7 @@ import ArProgress from '../components/ui/ArProgress.vue'
 import ArSelectMenu from '../components/ui/ArSelectMenu.vue'
 import ArEmpty from '../components/ui/ArEmpty.vue'
 import ActionMenu from '../components/ui/ActionMenu.vue'
+import PoolActions from '../components/PoolActions.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import ClusterStatus from '../components/ClusterStatus.vue'
 
@@ -252,7 +253,7 @@ const expandedPools = reactive({})
 
 /* add pool panel */
 const showAddPool = ref(false)
-const poolForm = reactive({ name: '', flavor: 'g6.xlarge.2', count: 2, labels: [], taints: [], userData: '' })
+const poolForm = reactive({ name: '', flavor: 'g6.xlarge.2', count: 2, labels: [], taints: [] })
 const poolFormOk = computed(() => /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(poolForm.name) && poolForm.count >= 1)
 const K8S_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?$/
 const K8S_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
@@ -289,13 +290,11 @@ function submitPool() {
     volumeGb: poolForm.volumeGb,
     labels: [...poolForm.labels],
     taints: poolForm.taints.filter((t) => t.key).map((t) => ({ ...t })),
-    userData: poolForm.userData,
   })
   showAddPool.value = false
   poolForm.name = ''
   poolForm.labels = []
   poolForm.taints = []
-  poolForm.userData = ''
 }
 
 /* delete cluster */
@@ -314,6 +313,25 @@ function doDelete() {
 const upgradeOpen = ref(false)
 const upgradeTarget = computed(() => VERSIONS[0])
 const upgradeReady = computed(() => !!cluster.value && upgradeTarget.value.patch !== cluster.value.version)
+const latestPatch = VERSIONS[0].patch
+/* position of the cluster's version within the supported list — index >= 2 means it is
+   the oldest supported minor (2+ minors behind latest): recommend upgrading more firmly */
+const verAging = computed(() => {
+  const cur = VERSIONS.find((v) => v.patch === cluster.value?.version)
+  return !cur || VERSIONS.indexOf(cur) >= VERSIONS.length - 1
+})
+const verBadge = computed(() => {
+  if (!cluster.value) return ''
+  if (cluster.value.status === 'upgrading') return 'Upgrading'
+  if (newerVersionAvailable(cluster.value)) return 'Update available'
+  return 'Up to date'
+})
+const verBadgeTone = computed(() => {
+  if (!cluster.value) return 'neutral'
+  if (cluster.value.status === 'upgrading') return 'info'
+  if (newerVersionAvailable(cluster.value)) return 'warning'
+  return 'success'
+})
 function doUpgrade() {
   store.upgradeCluster(cluster.value, upgradeTarget.value.id)
   upgradeOpen.value = false
@@ -370,9 +388,6 @@ function menuAction(item) {
         <ArButton variant="secondary" @click="downloadKubeconfig(cluster)">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m0 0 3-3M8 10 5 7M3 13h10"/></svg>
           Kubeconfig
-        </ArButton>
-        <ArButton v-if="newerVersionAvailable(cluster)" variant="primary" @click="upgradeOpen = true">
-          Upgrade to v{{ upgradeTarget.patch }}
         </ArButton>
         <ActionMenu
           :items="[
@@ -431,8 +446,27 @@ function menuAction(item) {
         >
           <button class="link-btn" @click="tab = 'events'">View events</button>
         </StatCard>
-        <StatCard label="PODS" :value="String(cluster.usage.pods)">
-          <span class="text-caption-1 muted">across all namespaces</span>
+        <StatCard
+          label="KUBERNETES VERSION"
+          :value="'v' + cluster.version"
+          :badge="verBadge"
+          :badge-tone="verBadgeTone"
+        >
+          <template v-if="cluster.status === 'upgrading'">
+            <span class="text-caption-1 muted">Upgrading to v{{ cluster.upgrade.to }} — node pools drain and roll automatically.</span>
+          </template>
+          <template v-else-if="newerVersionAvailable(cluster)">
+            <span class="text-caption-1 muted">
+              v{{ upgradeTarget.patch }} is available{{ verAging ? '. Upgrading is recommended before standard support ends.' : '.' }}
+            </span>
+            <button class="ver-cta" @click="upgradeOpen = true">
+              Upgrade to v{{ upgradeTarget.patch }}
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+            </button>
+          </template>
+          <template v-else>
+            <span class="text-caption-1 muted">v{{ latestPatch }} is the latest supported version.</span>
+          </template>
         </StatCard>
       </div>
 
@@ -519,19 +553,7 @@ function menuAction(item) {
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: var(--space-2)">
-            <div class="count-input sm-scale">
-              <button :disabled="cluster.status !== 'running' || pool.count <= 1" @click="store.scalePool(cluster, pool, -1)">−</button>
-              <input :value="pool.count" readonly />
-              <button :disabled="cluster.status !== 'running' || pool.count >= 20" @click="store.scalePool(cluster, pool, 1)">+</button>
-            </div>
-            <ActionMenu
-              :items="[
-                { label: 'Delete pool', danger: true, disabled: cluster.pools.length <= 1, action: 'delete' },
-              ]"
-              @select="(i) => {
-                if (i.action === 'delete') store.removePool(cluster, pool)
-              }"
-            />
+            <PoolActions :cluster="cluster" :pool="pool" />
           </div>
         </div>
 
@@ -953,14 +975,6 @@ function menuAction(item) {
         <span v-if="poolForm.taints.length && !poolMetaOk" class="error-text">Taint keys must be lowercase (letters, digits, -, .). Value is optional.</span>
       </div>
 
-      <div class="ar-field">
-        <label>Startup script</label>
-        <div class="ar-input textarea">
-          <textarea v-model="poolForm.userData" rows="4" placeholder="#!/bin/bash" spellcheck="false" style="font-family: var(--font-mono, monospace); font-size: 12px"></textarea>
-        </div>
-        <span class="hint">A cloud-init user-data script that runs on every node of this pool at first boot.</span>
-      </div>
-
       <template #footer>
         <ArButton variant="tertiary" @click="showAddPool = false">Cancel</ArButton>
         <ArButton variant="primary" :disabled="!poolFormOk || !poolMetaOk" @click="submitPool">Add pool</ArButton>
@@ -1010,3 +1024,21 @@ function menuAction(item) {
     </div>
   </main>
 </template>
+
+<style scoped>
+/* call-to-action under the Kubernetes version stat card — a bordered button
+   reads as clickable, unlike the plain text link it replaces */
+.ver-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 10px;
+  border: 1px solid var(--bg-primary-t1-1-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-neutral-t1-1-default);
+  color: var(--fg-primary-t1-1-default);
+  font: inherit; font-size: 12.5px; font-weight: 500;
+  cursor: pointer; margin-top: var(--space-3);
+  transition: background .15s;
+}
+.ver-cta:hover { background: var(--bg-primary-t3-1-default); }
+.ver-cta svg { flex: none; }
+</style>

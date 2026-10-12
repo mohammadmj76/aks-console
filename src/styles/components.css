@@ -45,6 +45,7 @@
   display: inline-flex; align-items: center; gap: 4px;
   height: 22px; padding: 0 8px; border-radius: var(--radius-sm);
   font-size: 12px; font-weight: 450; letter-spacing: -0.24px;
+  white-space: nowrap; flex: none;
 }
 .ar-badge.pill { border-radius: var(--radius-circular); }
 .ar-badge.success { background: var(--bg-success-t3-1-default); color: var(--fg-success-t1-1-default); }
@@ -430,6 +431,7 @@ table.ar-table { width: 100%; border-collapse: collapse; }
 }
 .banner.info { background: var(--bg-info-t3-1-default); color: var(--fg-info-t1-1-default); }
 .banner.warning { background: var(--bg-warning-t3-1-default); color: var(--fg-warning-t1-1-default); }
+.banner.error { background: var(--bg-error-t3-1-default); color: var(--fg-error-t1-1-default); }
 .banner.success { background: var(--bg-success-t3-1-default); color: var(--fg-success-t1-1-default); }
 
 .callout {

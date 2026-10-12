@@ -22,6 +22,32 @@ const emit = defineEmits(['toggle', 'remove'])
 
 const displayName = computed(() => props.pool.name || `node-pool-${props.index + 1}`)
 
+/* exactly what still needs completing — mirrors the parent's poolOk() checks */
+const missingItems = computed(() => {
+  const p = props.pool
+  const items = []
+  if (p.name && !POOL_NAME.test(p.name)) items.push('Pool name: use lowercase letters, digits and dashes (3–40 characters)')
+  if (!p.specs.length) items.push('Flavor: pick one from the flavor table')
+  else if (!p.specs[0].zones.length) items.push('Availability zone: select at least one zone for the chosen flavor')
+  if (!(Number.isInteger(p.count) && p.count >= 1 && p.count <= 20)) items.push('Node count: between 1 and 20')
+  if (p.loginMode === 'keypair') {
+    if (!p.keyPairId) items.push('SSH key pair: select one from the list')
+  } else {
+    if (p.password.length < 8) items.push('SSH password: at least 8 characters')
+    if (p.passwordConfirm !== p.password) items.push('Password confirmation: must match the password')
+  }
+  if (p.labels.length && !p.labels.every((l) => {
+    const [k, v] = l.split('=')
+    return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
+  })) items.push('Node labels: fix the invalid key=value entries')
+  if (p.taints.length && !p.taints.every((t) => K8S_KEY.test(t.key) && (t.value === '' || K8S_VAL.test(t.value))))
+    items.push('Taints: fix the invalid entries')
+  return items
+})
+const missingShort = computed(() =>
+  missingItems.value.map((m) => m.split(':')[0]).join(' · ')
+)
+
 /* collapsed-header summary: flavor · node count · zones */
 const summary = computed(() => {
   const bits = []
@@ -114,7 +140,6 @@ function setLoginMode(mode) {
 
 /* ---------------- advanced settings ---------------- */
 const advOpen = ref(false)
-const poolImageTab = ref('public')
 const IMAGES = [
   { id: 'ubuntu-22.04', name: 'Ubuntu 22.04' },
   { id: 'debian-12', name: 'Debian 12' },
@@ -170,9 +195,11 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       <svg class="pool-chev" :class="{ flip: open }" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 6.5 4 4 4-4"/></svg>
       <div class="pool-titles">
         <span class="pool-name text-body-1-strong">{{ displayName }}</span>
-        <span v-if="!open" class="pool-sub text-caption-1" :class="{ 'err-sub': !ok }">{{ summary }}</span>
+        <span v-if="!open" class="pool-sub text-caption-1" :class="{ 'err-sub': !ok }">
+          {{ !ok ? `Missing: ${missingShort}` : summary }}
+        </span>
       </div>
-      <span v-if="!open && !ok" class="pool-badge">
+      <span v-if="!open && !ok" class="pool-badge" :title="`Missing: ${missingShort}`">
         <span class="dot"></span> Incomplete
       </span>
       <button
@@ -190,6 +217,15 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 
     <!-- ======== body (expanded) ======== -->
     <div v-show="open" class="pool-body">
+      <div v-if="!ok" class="pool-missing">
+        <svg style="flex: none; margin-top: 2px" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2 14.5 13.5H1.5L8 2Z"/><path d="M8 6.8v3M8 12.2v.2"/></svg>
+        <div>
+          <strong>Complete {{ missingItems.length === 1 ? 'this item' : `these ${missingItems.length} items` }} to create the cluster:</strong>
+          <ul>
+            <li v-for="m in missingItems" :key="m">{{ m }}</li>
+          </ul>
+        </div>
+      </div>
       <div style="display: flex; gap: var(--space-4); flex-wrap: wrap">
         <div class="ar-field" style="flex: 1; min-width: 220px; max-width: 360px">
           <label>Pool Name</label>
@@ -407,11 +443,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         <div class="dist-row" style="align-items: flex-start">
           <span class="dist-k" style="margin-top: 6px">OS</span>
           <div style="display: flex; flex-direction: column; gap: var(--space-3)">
-            <div class="seg">
-              <button :class="{ on: poolImageTab === 'public' }" @click="poolImageTab = 'public'">Public image</button>
-              <button :class="{ on: poolImageTab === 'private' }" @click="poolImageTab = 'private'">Private image</button>
-            </div>
-            <div v-if="poolImageTab === 'public'" class="chip-row">
+            <div class="chip-row">
               <button
                 v-for="img in IMAGES"
                 :key="img.id"
@@ -426,7 +458,6 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
                 {{ img.name }}
               </button>
             </div>
-            <p v-else class="scale-note muted">Private images are not available yet.</p>
           </div>
         </div>
 
@@ -482,23 +513,6 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
             <span v-else class="hint">Tainted nodes repel pods that do not tolerate the taint. Value is optional.</span>
           </div>
         </div>
-
-        <!-- Startup script -->
-        <div class="dist-row" style="align-items: flex-start">
-          <span class="dist-k" style="margin-top: 6px">Startup Script</span>
-          <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-2); max-width: 560px">
-            <div class="ar-input textarea" :class="{ 'error-mode': pool.userData.length > 16000 }">
-              <textarea
-                v-model="pool.userData"
-                rows="5"
-                placeholder="#!/bin/bash"
-                spellcheck="false"
-                style="font-family: var(--font-mono, monospace); font-size: 12px"
-              ></textarea>
-            </div>
-            <span class="hint">A cloud-init user-data script that runs on every node of this pool at first boot. Maximum 16 KB.</span>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -534,6 +548,17 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
   border-radius: var(--radius-circular); padding: 3px 10px;
 }
 .pool-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bg-error-t1-1-default); }
+.pool-missing {
+  display: flex; gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-error-t3-1-default);
+  border: 1px solid var(--bg-error-t1-1-default);
+  border-radius: var(--radius-md);
+  color: var(--fg-error-t1-1-default);
+  font-size: 13px;
+}
+.pool-missing ul { margin: var(--space-2) 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+.pool-missing li { line-height: 20px; }
 .pool-del {
   flex: none; display: inline-flex; align-items: center; gap: 4px;
   border: 0; background: none; cursor: pointer; font: inherit; font-size: 12.5px;

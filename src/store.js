@@ -58,7 +58,6 @@ export const store = reactive({
         createdAt: new Date().toISOString(),
         labels: [...(poolDraft.labels || [])],
         taints: (poolDraft.taints || []).filter((t) => t.key).map((t) => ({ ...t })),
-        userData: poolDraft.userData || '',
       }
     })
 
@@ -144,7 +143,6 @@ export const store = reactive({
     cluster.pools.push({
       labels: [],
       taints: [],
-      userData: '',
       image: 'ubuntu-22.04',
       ...pool,
       id: 'pool-' + nextId(),
@@ -154,15 +152,31 @@ export const store = reactive({
     this.toast('success', 'Node pool created', `${pool.name} is joining ${cluster.name}.`)
   },
 
-  scalePool(cluster, pool, delta) {
-    const next = pool.count + delta
-    if (next < 1 || next > 20) return
+  /* fixed-size resize from the pool "…" menu (no autoscaler in current scope) */
+  resizePool(cluster, pool, count) {
+    const next = Math.min(20, Math.max(1, Math.round(+count)))
+    if (!Number.isInteger(next) || next === pool.count) return
+    const from = pool.count
     pool.count = next
     this.events[cluster.id].unshift({
       ts: timeNow(), type: 'Normal',
-      reason: delta > 0 ? 'ScaleUp' : 'ScaleDown',
-      msg: `Pool ${pool.name} scaled to ${next} node${next === 1 ? '' : 's'}`,
+      reason: next > from ? 'ScaleUp' : 'ScaleDown',
+      msg: `Pool ${pool.name} resized ${from} → ${next} node${next === 1 ? '' : 's'}`,
     })
+    this.toast('success', 'Node count updated', `${pool.name} is scaling to ${next} node${next === 1 ? '' : 's'}.`)
+  },
+
+  renamePool(cluster, pool, name) {
+    const old = pool.name
+    pool.name = name
+    this.events[cluster.id].unshift({ ts: timeNow(), type: 'Normal', reason: 'PoolRenamed', msg: `Node pool ${old} renamed to ${name}` })
+    this.toast('success', 'Pool renamed', `${old} is now ${name}.`)
+  },
+
+  setPoolLabels(cluster, pool, labels) {
+    pool.labels = labels
+    this.events[cluster.id].unshift({ ts: timeNow(), type: 'Normal', reason: 'PoolLabelsUpdated', msg: `Labels updated on node pool ${pool.name}` })
+    this.toast('success', 'Labels updated', `${pool.name} now has ${labels.length} label${labels.length === 1 ? '' : 's'}.`)
   },
 
   removePool(cluster, pool) {

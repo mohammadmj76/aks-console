@@ -259,7 +259,7 @@ export function apiEndpoint(cluster) {
 }
 
 /* ---------- pricing (IRR) ---------- */
-export const fmtIRR = (n) => n.toLocaleString('en-US')
+export const fmtIRR = (n) => (n == null ? 0 : n).toLocaleString('en-US')
 
 export function monthlyPrice({ cp, pool }) {
   const cpPlan = CP_PLANS.find((p) => p.id === cp.plan)

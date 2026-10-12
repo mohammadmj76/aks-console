@@ -1,17 +1,16 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { store } from '../store'
 import { REGION, VPCS, FLAVOR_CATALOG, fmtDate, flavorName } from '../data'
 import ArButton from '../components/ui/ArButton.vue'
 import ArProgress from '../components/ui/ArProgress.vue'
 import ArEmpty from '../components/ui/ArEmpty.vue'
-import ActionMenu from '../components/ui/ActionMenu.vue'
+import PoolActions from '../components/PoolActions.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import ClusterStatus from '../components/ClusterStatus.vue'
 
 const route = useRoute()
-const router = useRouter()
 
 const cluster = computed(() => store.getCluster(route.params.id))
 const pool = computed(() => cluster.value?.pools.find((p) => p.id === route.params.poolId))
@@ -77,18 +76,6 @@ const poolSubnets = computed(() => {
 const poolEvents = computed(() =>
   (store.events[cluster.value?.id] || []).filter((e) => pool.value && e.msg.includes(pool.value.name))
 )
-
-function scale(delta) {
-  if (cluster.value?.status !== 'running') return
-  store.scalePool(cluster.value, pool.value, delta)
-}
-
-function deletePool() {
-  if (!cluster.value || !pool.value || cluster.value.pools.length <= 1) return
-  const cid = cluster.value.id
-  store.removePool(cluster.value, pool.value)
-  router.push({ path: `/clusters/${cid}`, query: { tab: 'pools' } })
-}
 </script>
 
 <template>
@@ -118,17 +105,7 @@ function deletePool() {
         </div>
       </div>
       <div style="display: flex; gap: var(--space-2); align-items: center">
-        <div class="count-input">
-          <button :disabled="cluster.status !== 'running' || pool.count <= 1" title="Scale in" @click="scale(-1)">−</button>
-          <input :value="pool.count" readonly aria-label="Node count" />
-          <button :disabled="cluster.status !== 'running' || pool.count >= 20" title="Scale out" @click="scale(1)">+</button>
-        </div>
-        <ActionMenu
-          :items="[
-            { label: 'Delete pool', danger: true, disabled: cluster.pools.length <= 1, action: 'delete' },
-          ]"
-          @select="(i) => { if (i.action === 'delete') deletePool() }"
-        />
+        <PoolActions :cluster="cluster" :pool="pool" />
       </div>
     </div>
 
@@ -250,11 +227,6 @@ function deletePool() {
                   <span class="dot"></span>{{ t.key }}{{ t.value ? '=' + t.value : '' }}:{{ t.effect }}
                 </span>
               </span>
-              <span v-else class="v muted">—</span>
-            </div>
-            <div class="row">
-              <span class="k" style="width: 120px">Startup script</span>
-              <pre v-if="pool.userData" class="v code-block">{{ pool.userData }}</pre>
               <span v-else class="v muted">—</span>
             </div>
           </div>

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store } from '../store'
 import {
@@ -41,7 +41,7 @@ const draft = reactive({
   cp: { plan: 'medium' },
   vpcId: '',
   subnetIds: [],
-  podCidrs: [{ octets: ['192', '168', '0', '0'], prefix: '16' }],
+  podCidrs: [{ octets: ['172', '16', '0', '0'], prefix: '16' }],
   svcCidrs: [{ octets: ['10', '10', '0', '0'], prefix: '24' }],
   pools: [],
 })
@@ -63,7 +63,6 @@ function makePool(from) {
     image: from?.image || 'ubuntu-22.04',
     labels: [],
     taints: [],
-    userData: '',
   }
 }
 draft.pools.push(makePool())
@@ -117,6 +116,39 @@ function isValidCidrs(list) {
 const cidrStr = (r) => `${r.octets.join('.')}/${r.prefix}`
 const cidrCapacity = (r) => Math.pow(2, 32 - +r.prefix).toLocaleString('en-US')
 
+/* ---- CIDR overlap checks: container / service vs each other and the VPC ----
+   (selected subnets sit inside the VPC range, so the VPC check covers them) */
+function parseCidr(str) {
+  const [ip, p] = str.split('/')
+  const parts = ip.split('.')
+  if (parts.length !== 4 || parts.some((x) => x === '')) return null
+  const [a, b, c, d] = parts.map(Number)
+  if ([a, b, c, d].some((n) => Number.isNaN(n) || n < 0 || n > 255)) return null
+  if (!(+p >= 8 && +p <= 32)) return null
+  const base = ((a << 24) | (b << 16) | (c << 8) | d) >>> 0
+  return [base, base + Math.pow(2, 32 - +p) - 1]
+}
+const rangesOverlap = (x, y) => x[0] <= y[1] && y[0] <= x[1]
+const cidrConflicts = computed(() => {
+  const out = []
+  const v = vpc.value
+  if (!v) return out
+  const pod = parseCidr(cidrStr(draft.podCidrs[0]))
+  const svc = parseCidr(cidrStr(draft.svcCidrs[0]))
+  const vpcR = parseCidr(v.cidr)
+  if (!pod || !svc || !vpcR) return out
+  if (rangesOverlap(pod, svc)) {
+    out.push({ net: 'pod', text: `The container CIDR overlaps the service CIDR (${cidrStr(draft.svcCidrs[0])}). Choose a different range for one of them.` })
+    out.push({ net: 'svc', text: `The service CIDR overlaps the container CIDR (${cidrStr(draft.podCidrs[0])}). Choose a different range for one of them.` })
+  }
+  const vpcLabel = `the VPC CIDR of ${v.name} (${v.cidr})`
+  if (rangesOverlap(pod, vpcR)) out.push({ net: 'pod', text: `The container CIDR overlaps ${vpcLabel}. Choose a different range.` })
+  if (rangesOverlap(svc, vpcR)) out.push({ net: 'svc', text: `The service CIDR overlaps ${vpcLabel}. Choose a different range.` })
+  return out
+})
+const podConflicts = computed(() => cidrConflicts.value.filter((c) => c.net === 'pod'))
+const svcConflicts = computed(() => cidrConflicts.value.filter((c) => c.net === 'svc'))
+
 function octetInput(e, row, i) {
   const v = e.target.value.replace(/[^\d]/g, '').slice(0, 3)
   row.octets[i] = v
@@ -141,11 +173,30 @@ function selectType(p) {
   draft.cp.plan = p.id
 }
 function toggleSubnet(id) {
-  const i = draft.subnetIds.indexOf(id)
-  i >= 0 ? draft.subnetIds.splice(i, 1) : draft.subnetIds.push(id)
+  if (masterDist.value === 'custom') {
+    /* Single AZ: one subnet only (radio behaviour — clicking the selected row keeps it) */
+    draft.subnetIds = draft.subnetIds[0] === id ? draft.subnetIds : [id]
+  } else {
+    const i = draft.subnetIds.indexOf(id)
+    i >= 0 ? draft.subnetIds.splice(i, 1) : draft.subnetIds.push(id)
+  }
 }
+/* subnets outside the chosen AZ are locked in Single AZ mode */
+const subnetLocked = (sn) => masterDist.value === 'custom' && sn.zone !== masterHostAz.value
+const singleAzSubnets = computed(() =>
+  masterDist.value === 'custom' ? (vpc.value?.subnets || []).filter((sn) => sn.zone === masterHostAz.value) : []
+)
+/* keep the selection valid when the distribution or AZ changes */
+watch([masterDist, masterHostAz], () => {
+  if (masterDist.value !== 'custom' || !vpc.value) return
+  const keep = draft.subnetIds.filter((id) => {
+    const sn = vpc.value.subnets.find((s) => s.id === id)
+    return sn && sn.zone === masterHostAz.value
+  })
+  draft.subnetIds = keep.slice(0, 1)
+})
 
-const step1Ok = computed(() => nameOk.value && subnetOk.value && cidrsOk.value && masterAzsOk.value)
+const step1Ok = computed(() => nameOk.value && subnetOk.value && cidrsOk.value && masterAzsOk.value && !cidrConflicts.value.length)
 
 /* ---------------- pool validation ---------------- */
 const POOL_NAME = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/
@@ -172,7 +223,6 @@ function poolOk(p, i, all) {
     return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
   })) return false
   if (!p.taints.every((t) => K8S_KEY.test(t.key) && (t.value === '' || K8S_VAL.test(t.value)))) return false
-  if (p.userData.length > 16000) return false
   return true
 }
 const poolStates = computed(() => draft.pools.map((p, i) => poolOk(p, i, draft.pools)))
@@ -240,7 +290,6 @@ function create() {
         image: p.image,
         labels: [...p.labels],
         taints: p.taints.filter((t) => t.key).map((t) => ({ ...t })),
-        userData: p.userData,
       })),
     })
     creating.value = false
@@ -357,6 +406,9 @@ function create() {
               <p class="text-body-2 muted" style="margin: 2px 0 0">Choose cluster type based on your requirement.</p>
             </div>
 
+            <div class="ar-field" style="margin-bottom: var(--space-3)">
+              <span class="ar-field-label">Cluster Size</span>
+            </div>
             <div class="seg" style="margin-bottom: var(--space-4)">
               <button :class="{ on: typeView === 'card' }" @click="typeView = 'card'">Card</button>
               <button :class="{ on: typeView === 'table' }" @click="typeView = 'table'">Table</button>
@@ -516,11 +568,17 @@ function create() {
                           v-for="sn in vpc?.subnets || []"
                           :key="sn.id"
                           class="selectable"
-                          :class="{ selected: draft.subnetIds.includes(sn.id) }"
-                          @click="toggleSubnet(sn.id)"
+                          :class="{ selected: draft.subnetIds.includes(sn.id), 'row-locked': subnetLocked(sn) }"
+                          @click="!subnetLocked(sn) && toggleSubnet(sn.id)"
                         >
                           <td @click.stop>
-                            <ArCheckbox :model-value="draft.subnetIds.includes(sn.id)" @update:model-value="toggleSubnet(sn.id)" />
+                            <ArRadioDot
+                              v-if="masterDist === 'custom'"
+                              :model-value="draft.subnetIds.includes(sn.id)"
+                              :disabled="subnetLocked(sn)"
+                              @update:model-value="toggleSubnet(sn.id)"
+                            />
+                            <ArCheckbox v-else :model-value="draft.subnetIds.includes(sn.id)" @update:model-value="toggleSubnet(sn.id)" />
                           </td>
                           <td><a href="#" @click.prevent.stop>{{ sn.name }}</a></td>
                           <td class="mono text-body-2">{{ sn.cidr }}</td>
@@ -533,7 +591,13 @@ function create() {
                       </tbody>
                     </table>
                   </div>
-                  <span class="hint">Pick one subnet per availability zone you want worker nodes in.</span>
+                  <span v-if="masterDist === 'custom'" class="hint">
+                    Single AZ deployment — select one subnet in {{ REGION.zones.find((z) => z.id === masterHostAz)?.name }}. Subnets in other AZs are locked.
+                  </span>
+                  <span v-else class="hint">Pick one subnet per availability zone you want worker nodes in.</span>
+                  <span v-if="masterDist === 'custom' && vpc && !singleAzSubnets.length" class="error-text">
+                    No subnet in {{ REGION.zones.find((z) => z.id === masterHostAz)?.name }} for this VPC — choose a different AZ or VPC.
+                  </span>
                   <span v-if="masterDist === 'automatic' && vpc && missingAzSubnets.length" class="error-text">
                     Multi AZ requires a subnet in every availability zone — missing: {{ missingAzSubnets.map((z) => REGION.zones.find((zz) => zz.id === z)?.name).join(', ') }}.
                   </span>
@@ -578,6 +642,10 @@ function create() {
                   <svg style="flex:none" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2 14.5 13.5H1.5L8 2Z"/><path d="M8 6.8v3M8 12.2v.2"/></svg>
                   <span>CIDR block cannot be modified after the cluster is created. Ensure it does not overlap with the VPC and subnet CIDR blocks to prevent communication issues.</span>
                 </div>
+                <div v-for="(c, i) in podConflicts" :key="i" class="banner error" style="margin-top: var(--space-1)">
+                  <svg style="flex:none" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 5.2v3.4M8 11.4v.2"/><circle cx="8" cy="8" r="6.2"/></svg>
+                  <span>{{ c.text }}</span>
+                </div>
               </div>
             </div>
 
@@ -617,6 +685,10 @@ function create() {
                 <div class="banner warning" style="margin-top: var(--space-1)">
                   <svg style="flex:none" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2 14.5 13.5H1.5L8 2Z"/><path d="M8 6.8v3M8 12.2v.2"/></svg>
                   <span>CIDR block cannot be modified after the cluster is created. Ensure it does not overlap with the subnet CIDR blocks of dependent middleware (such as RDS and Redis) to prevent communication issues.</span>
+                </div>
+                <div v-for="(c, i) in svcConflicts" :key="i" class="banner error" style="margin-top: var(--space-1)">
+                  <svg style="flex:none" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 5.2v3.4M8 11.4v.2"/><circle cx="8" cy="8" r="6.2"/></svg>
+                  <span>{{ c.text }}</span>
                 </div>
               </div>
             </div>
@@ -988,6 +1060,9 @@ function create() {
 
 /* review step — full-width layout: the summary rail is hidden on step 3 */
 .wizard-grid.no-rail { grid-template-columns: 1fr; }
+/* subnets outside the selected AZ (Single AZ mode) */
+:deep(.ar-table tbody tr.row-locked) { opacity: .45; cursor: not-allowed; }
+:deep(.ar-table tbody tr.row-locked:hover) { background: transparent; }
 .review-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-6); }
 @media (max-width: 1100px) { .review-grid { grid-template-columns: 1fr; } }
 .rv-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
