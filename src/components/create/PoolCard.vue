@@ -17,6 +17,8 @@ const props = defineProps({
   index: { type: Number, required: true },
   open: { type: Boolean, default: false },
   ok: { type: Boolean, default: true },
+  /* zones the pool may use — non-empty when master distribution is Single AZ */
+  allowedZones: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['toggle', 'remove'])
 
@@ -87,11 +89,16 @@ const perPage = ref(5)
 const vcpuOptions = [...new Set(FLAVOR_CATALOG.map((f) => f.vcpu))].sort((a, b) => a - b)
 const memOptions = [...new Set(FLAVOR_CATALOG.map((f) => f.ram))].sort((a, b) => a - b)
 
+/* zones this pool may use (empty = all); flavors need an available zone inside it */
+const poolZones = computed(() => (props.allowedZones.length ? props.allowedZones : REGION.zones.map((z) => z.id)))
+const flavorZones = (f) => f.azs.filter((z) => poolZones.value.includes(z.id))
+
 const filteredFlavors = computed(() =>
   FLAVOR_CATALOG.filter((f) => {
     if (f.category !== fCat.value) return false
     if (fVcpu.value !== '' && f.vcpu !== +fVcpu.value) return false
     if (fMem.value !== '' && f.ram !== +fMem.value) return false
+    if (!flavorZones(f).some((z) => !z.soldOut)) return false
     if (fAz.value !== '' && !f.azs.some((z) => z.id === fAz.value && !z.soldOut)) return false
     return true
   })
@@ -104,9 +111,9 @@ const pageNumbers = computed(() => Array.from({ length: totalPages.value }, (_, 
 
 const zoneName = (id) => REGION.zones.find((z) => z.id === id)?.name || id
 const azCell = (f) =>
-  f.azs.map((z) => (z.soldOut ? `${zoneName(z.id)} (Sold out)` : zoneName(z.id))).join(' | ')
-const availableZones = (f) => f.azs.filter((z) => !z.soldOut).map((z) => z.id)
-const allZonesSoldOut = (f) => f.azs.every((z) => z.soldOut)
+  flavorZones(f).map((z) => (z.soldOut ? `${zoneName(z.id)} (Sold out)` : zoneName(z.id))).join(' | ')
+const availableZones = (f) => flavorZones(f).filter((z) => !z.soldOut).map((z) => z.id)
+const allZonesSoldOut = (f) => !availableZones(f).length
 
 /* single flavor per pool — picking another replaces the current one */
 function toggleFlavor(f) {
@@ -118,6 +125,7 @@ function specSelected(f) {
   return props.pool.specs[0]?.flavorId === f.id
 }
 function specToggleZone(zoneId, f) {
+  if (!poolZones.value.includes(zoneId)) return
   if (f.azs.find((z) => z.id === zoneId)?.soldOut) return
   const zones = props.pool.specs[0].zones
   const i = zones.indexOf(zoneId)
@@ -258,7 +266,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
           <label>AZ</label>
           <ArSelectMenu
             v-model="fAz"
-            :options="[{ value: '', label: 'All' }, ...REGION.zones.map((z) => ({ value: z.id, label: z.name }))]"
+            :options="[{ value: '', label: 'All' }, ...poolZones.map((z) => ({ value: z, label: zoneName(z) }))]"
             aria-label="AZ"
           />
         </div>
@@ -281,10 +289,10 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
               <th style="width: 36px"></th>
               <th>Flavor</th>
               <th>AZ</th>
-              <th>vCPUs / Memory</th>
+              <th>vCPUs</th>
+              <th>Memory</th>
+              <th>Disk</th>
               <th>Port Speed</th>
-              <th>Packets Per Second</th>
-              <th>Max. Pods</th>
               <th>Pricing</th>
             </tr>
           </thead>
@@ -305,14 +313,14 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
               </td>
               <td class="mono cell-main">{{ f.id }}</td>
               <td class="text-body-2" :class="{ muted: f.azs.some((z) => z.soldOut) }">{{ azCell(f) }}</td>
-              <td class="text-body-2">{{ f.vcpu }} vCPUs / {{ f.ram }} GiB</td>
+              <td class="text-body-2">{{ f.vcpu }}</td>
+              <td class="text-body-2">{{ f.ram }} GiB</td>
+              <td class="text-body-2">25 GB</td>
               <td class="text-body-2 muted">{{ f.bandwidth.split(' / ').pop() }}</td>
-              <td class="text-body-2 muted">{{ f.pps }} pps</td>
-              <td class="text-body-2">{{ f.maxPods }}</td>
-              <td class="text-body-2-strong">{{ fmtIRR(f.pricePerHour) }} IRR/hour</td>
+              <td class="text-body-2-strong">{{ fmtIRR(Math.round(f.pricePerHour * 730)) }} IRR/month</td>
             </tr>
             <tr v-if="!pagedFlavors.length">
-              <td colspan="8" class="text-body-2 muted" style="text-align: center; padding: var(--space-6)">No flavors match the current filters.</td>
+              <td colspan="7" class="text-body-2 muted" style="text-align: center; padding: var(--space-6)">No flavors match the current filters.</td>
             </tr>
           </tbody>
         </table>
@@ -351,11 +359,11 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
                   {{ FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId)?.vcpu }} vCPUs /
                   {{ FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId)?.ram }} GiB
                 </td>
-                <td class="text-body-2">{{ fmtIRR(FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId)?.pricePerHour) }} IRR/hour</td>
+                <td class="text-body-2">{{ fmtIRR(Math.round(FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId)?.pricePerHour * 730 || 0)) }} IRR/month</td>
                 <td>
                   <div class="chip-row">
                     <label
-                      v-for="z in FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId)?.azs"
+                      v-for="z in flavorZones(FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId))"
                       :key="z.id"
                       class="check-line"
                       :style="z.soldOut ? 'opacity:.5' : ''"

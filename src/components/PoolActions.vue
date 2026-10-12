@@ -245,5 +245,9 @@ function onSelect(item) {
 .rs-unit { font-size: 13px; font-weight: 325; color: var(--fg-neutral-t1-3-default); }
 .rs-sub { font-size: 12.5px; color: var(--fg-neutral-t1-3-default); }
 .rs-plan { font-size: 13px; color: var(--fg-neutral-t1-2-default); }
+/* the modal body is a flex column, which blockifies and stretches the
+   inline-flex .count-input — pin it to its natural width (matches the
+   compact node-count control on the pool cards) */
+.count-input { width: fit-content; }
 .count-input.error-mode { border-color: var(--bg-error-t1-1-default); }
 </style>

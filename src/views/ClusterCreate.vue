@@ -70,6 +70,26 @@ function removePool(id) {
 const masterDist = ref('automatic')
 const masterHostAz = ref('foroogh')
 const masterAzsOk = computed(() => masterDist.value === 'automatic' || masterHostAz.value !== '')
+/* Single AZ clusters host their worker nodes in the master's AZ too */
+const poolAllowedZones = computed(() => (masterDist.value === 'custom' ? [masterHostAz.value] : []))
+/* keep existing pools valid when the distribution or AZ changes */
+watch(poolAllowedZones, (zones) => {
+  if (!zones.length) return
+  draft.pools.forEach((p) => {
+    p.specs = p.specs.filter((sp) => {
+      const f = FLAVOR_CATALOG.find((x) => x.id === sp.flavorId)
+      return f?.azs.some((z) => zones.includes(z.id) && !z.soldOut)
+    })
+    p.specs.forEach((sp) => {
+      sp.zones = sp.zones.filter((z) => zones.includes(z))
+      if (!sp.zones.length) {
+        /* flavor still exists in the new AZ — move it there instead of unselecting */
+        const f = FLAVOR_CATALOG.find((x) => x.id === sp.flavorId)
+        sp.zones = f.azs.filter((z) => zones.includes(z.id) && !z.soldOut).map((z) => z.id)
+      }
+    })
+  })
+})
 
 /* ---------------- computed ---------------- */
 const region = computed(() => REGIONS.find((r) => r.id === regionId.value))
@@ -649,6 +669,7 @@ function create() {
               :index="i"
               :open="openId === p.id"
               :ok="poolStates[i]"
+              :allowed-zones="poolAllowedZones"
               @toggle="togglePool(p.id)"
               @remove="removePool(p.id)"
             />
