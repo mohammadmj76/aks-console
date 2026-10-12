@@ -217,15 +217,6 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 
     <!-- ======== body (expanded) ======== -->
     <div v-show="open" class="pool-body">
-      <div v-if="!ok" class="pool-missing">
-        <svg style="flex: none; margin-top: 2px" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2 14.5 13.5H1.5L8 2Z"/><path d="M8 6.8v3M8 12.2v.2"/></svg>
-        <div>
-          <strong>Complete {{ missingItems.length === 1 ? 'this item' : `these ${missingItems.length} items` }} to create the cluster:</strong>
-          <ul>
-            <li v-for="m in missingItems" :key="m">{{ m }}</li>
-          </ul>
-        </div>
-      </div>
       <div style="display: flex; gap: var(--space-4); flex-wrap: wrap">
         <div class="ar-field" style="flex: 1; min-width: 220px; max-width: 360px">
           <label>Pool Name</label>
@@ -548,17 +539,6 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
   border-radius: var(--radius-circular); padding: 3px 10px;
 }
 .pool-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bg-error-t1-1-default); }
-.pool-missing {
-  display: flex; gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  background: var(--bg-error-t3-1-default);
-  border: 1px solid var(--bg-error-t1-1-default);
-  border-radius: var(--radius-md);
-  color: var(--fg-error-t1-1-default);
-  font-size: 13px;
-}
-.pool-missing ul { margin: var(--space-2) 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
-.pool-missing li { line-height: 20px; }
 .pool-del {
   flex: none; display: inline-flex; align-items: center; gap: 4px;
   border: 0; background: none; cursor: pointer; font: inherit; font-size: 12.5px;
