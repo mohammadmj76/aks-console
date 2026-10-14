@@ -149,15 +149,17 @@ onBeforeUnmount(() => {
           @keydown.stop="onKey"
           @input="onSearch"
         />
-        <button
-          v-for="(o, i) in visibleOptions"
-          :key="o.value"
-          type="button"
-          class="asm-opt"
-          :class="{ sel: o.value === modelValue, act: i === activeIdx }"
-          @click="pick(o)"
-          @mousemove="activeIdx = i"
-        >{{ o.label }}</button>
+        <template v-for="(o, i) in visibleOptions" :key="o.value">
+          <!-- group header: rendered once when the group value changes -->
+          <span v-if="o.group && (i === 0 || visibleOptions[i - 1].group !== o.group)" class="asm-group">{{ o.group }}</span>
+          <button
+            type="button"
+            class="asm-opt"
+            :class="{ sel: o.value === modelValue, act: i === activeIdx }"
+            @click="pick(o)"
+            @mousemove="activeIdx = i"
+          >{{ o.label }}</button>
+        </template>
         <span v-if="searchable && !visibleOptions.length" class="asm-empty">{{ emptyText }}</span>
       </div>
     </Teleport>
@@ -212,6 +214,11 @@ onBeforeUnmount(() => {
   padding: 9px 12px; border-radius: var(--radius-md);
 }
 .asm-empty { display: block; padding: 10px 12px; color: var(--fg-neutral-t1-3-default); font-size: 13px; }
+.asm-group {
+  display: block; padding: 8px 12px 3px;
+  font-size: 11px; font-weight: 550; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--fg-neutral-t1-3-default); user-select: none; cursor: default;
+}
 .asm-opt.act { background: var(--bg-neutral-t1-4-default); }
 .asm-opt.sel { color: var(--fg-primary-t1-1-default); font-weight: 450; background: var(--bg-primary-t3-1-default); }
 .asm-opt.sel::after {

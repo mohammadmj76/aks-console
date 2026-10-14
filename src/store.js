@@ -53,8 +53,6 @@ export const store = reactive({
         subnets: [...draft.subnetIds],
         volumeGb: 50,
         image: poolDraft.image || 'ubuntu-22.04',
-        loginMode: poolDraft.loginMode || 'password',
-        ...(poolDraft.loginMode === 'keypair' ? { keyPairId: poolDraft.keyPairId } : {}),
         createdAt: new Date().toISOString(),
         labels: [...(poolDraft.labels || [])],
         taints: (poolDraft.taints || []).filter((t) => t.key).map((t) => ({ ...t })),

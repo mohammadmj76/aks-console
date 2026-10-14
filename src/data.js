@@ -25,9 +25,9 @@ export const REGIONS = [
 ]
 
 export const VERSIONS = [
-  { id: '1.36', patch: '1.36.3', default: true },
-  { id: '1.35', patch: '1.35.4' },
-  { id: '1.34', patch: '1.34.8' },
+  { id: '1.36', patch: '1.36.3', default: true, endOfCycle: 'Jun 28, 2027' },
+  { id: '1.35', patch: '1.35.4', endOfCycle: 'Feb 28, 2027' },
+  { id: '1.34', patch: '1.34.8', endOfCycle: 'Oct 28, 2026' },
 ]
 
 /* Cluster types — dedicated control-plane specs (price in IRR/day) */
@@ -103,13 +103,6 @@ export const VPCS = [
 ]
 
 export const FIREWALL_GROUPS = ['Default', 'Internal Traffic', 'Web Traffic', 'SSH Restricted']
-
-/* Project SSH keys shown by the create-cluster credential selector. */
-export const KEY_PAIRS = [
-  { id: 'kp-fea4', name: 'KeyPair-fea4' },
-  { id: 'kp-prod1', name: 'production-admin' },
-  { id: 'kp-dev02', name: 'development-team' },
-]
 
 /* Day-1 platform components — bundled, not user-manageable addons
    (addons management ships in a later phase) */

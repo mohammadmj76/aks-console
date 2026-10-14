@@ -4,13 +4,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { store } from '../store'
 import {
   REGIONS, REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, FLAVOR_CATEGORIES,
-  VPCS, KEY_PAIRS, INCLUDED_COMPONENTS, VOLUME_PRICE_PER_GB, fmtIRR,
+  VPCS, INCLUDED_COMPONENTS, VOLUME_PRICE_PER_GB, fmtIRR,
 } from '../data'
 import ArButton from '../components/ui/ArButton.vue'
 import ArCheckbox from '../components/ui/ArCheckbox.vue'
 import ArSelectMenu from '../components/ui/ArSelectMenu.vue'
 import ArRadioDot from '../components/ui/ArRadioDot.vue'
 import PoolCard from '../components/create/PoolCard.vue'
+import InfoTip from '../components/InfoTip.vue'
 
 /*
  * A/B variant: two-step creation flow (?flow=stepper).
@@ -21,6 +22,20 @@ import PoolCard from '../components/create/PoolCard.vue'
 
 const route = useRoute()
 const router = useRouter()
+
+/* plain-English tooltips for the cluster-type card fields */
+const SPEC_TIPS = {
+  replica: 'The number of control plane nodes that run the cluster. If one node stops working, the others keep the cluster running.',
+  maxNodes: 'The maximum number of worker nodes that the cluster can manage. You can increase this limit later, but you cannot decrease it.',
+  etcd: 'etcd is the database that stores the cluster’s configuration and state. This is the maximum storage size etcd can use. Bigger clusters need more etcd space.',
+}
+
+/* plain-English tooltips for the network section headings */
+const NETWORK_TIPS = {
+  cluster: 'The network that the cluster’s nodes use. Control plane nodes and worker nodes get their IP addresses from the VPC and subnets you select here.',
+  pod: 'The IP address range for Kubernetes Pods. Every Pod receives an IP address from this range, so Pods can talk to each other directly.',
+  service: 'The IP address range for Kubernetes Services. A Service gives workloads one address that stays the same, even when the Pods behind it change.',
+}
 
 /* ---------------- stepper state ---------------- */
 const step = ref(1)
@@ -42,7 +57,7 @@ const draft = reactive({
   vpcId: '',
   subnetIds: [],
   podCidrs: [{ octets: ['172', '16', '0', '0'], prefix: '16' }],
-  svcCidrs: [{ octets: ['10', '10', '0', '0'], prefix: '24' }],
+  svcCidrs: [{ octets: ['10', '10', '0', '0'], prefix: '20' }],
   pools: [],
 })
 
@@ -56,10 +71,6 @@ function makePool(from) {
     name: '',
     count: 3,
     specs: [], // single choice: [{ flavorId, zones: [] }]
-    loginMode: from?.loginMode || 'password',
-    password: from?.password || '',
-    passwordConfirm: from?.passwordConfirm || '',
-    keyPairId: from?.keyPairId || '',
     image: from?.image || 'ubuntu-22.04',
     labels: [],
     taints: [],
@@ -124,19 +135,19 @@ const subnetOk = computed(() => {
   if (masterDist.value !== 'automatic') return true
   return missingAzSubnets.value.length === 0
 })
-const cidrsOk = computed(() => isValidCidrs(draft.podCidrs) && isValidCidrs(draft.svcCidrs))
+const cidrsOk = computed(() => isValidCidrs(draft.podCidrs, 28) && isValidCidrs(draft.svcCidrs, 20))
 
-function isValidCidrs(list) {
+function isValidCidrs(list, maxPrefix) {
   return list.every(
     (r) =>
       r.octets.every((o) => o !== '' && !isNaN(o) && +o >= 0 && +o <= 255) &&
-      +r.prefix >= 8 && +r.prefix <= 28
+      +r.prefix >= 8 && +r.prefix <= maxPrefix
   )
 }
 const cidrStr = (r) => `${r.octets.join('.')}/${r.prefix}`
 const cidrCapacity = (r) => Math.pow(2, 32 - +r.prefix).toLocaleString('en-US')
 
-/* ---- CIDR overlap checks: container / service vs each other and the VPC ----
+/* ---- CIDR overlap checks: pod / service vs each other and the VPC ----
    (selected subnets sit inside the VPC range, so the VPC check covers them) */
 function parseCidr(str) {
   const [ip, p] = str.split('/')
@@ -158,11 +169,11 @@ const cidrConflicts = computed(() => {
   const vpcR = parseCidr(v.cidr)
   if (!pod || !svc || !vpcR) return out
   if (rangesOverlap(pod, svc)) {
-    out.push({ net: 'pod', text: `The container CIDR overlaps the service CIDR (${cidrStr(draft.svcCidrs[0])}). Choose a different range for one of them.` })
-    out.push({ net: 'svc', text: `The service CIDR overlaps the container CIDR (${cidrStr(draft.podCidrs[0])}). Choose a different range for one of them.` })
+    out.push({ net: 'pod', text: `The pod CIDR overlaps the service CIDR (${cidrStr(draft.svcCidrs[0])}). Choose a different range for one of them.` })
+    out.push({ net: 'svc', text: `The service CIDR overlaps the pod CIDR (${cidrStr(draft.podCidrs[0])}). Choose a different range for one of them.` })
   }
   const vpcLabel = `the VPC CIDR of ${v.name} (${v.cidr})`
-  if (rangesOverlap(pod, vpcR)) out.push({ net: 'pod', text: `The container CIDR overlaps ${vpcLabel}. Choose a different range.` })
+  if (rangesOverlap(pod, vpcR)) out.push({ net: 'pod', text: `The pod CIDR overlaps ${vpcLabel}. Choose a different range.` })
   if (rangesOverlap(svc, vpcR)) out.push({ net: 'svc', text: `The service CIDR overlaps ${vpcLabel}. Choose a different range.` })
   return out
 })
@@ -233,11 +244,6 @@ function poolOk(p, i, all) {
   if (all.some((o, j) => j !== i && poolNameOf(o, j) === nm)) return false
   if (p.specs.length !== 1 || !p.specs[0].zones.length) return false
   if (!(Number.isInteger(p.count) && p.count >= 1 && p.count <= 20)) return false
-  if (p.loginMode === 'keypair') {
-    if (!KEY_PAIRS.some((k) => k.id === p.keyPairId)) return false
-  } else {
-    if (p.password.length < 8 || p.password !== p.passwordConfirm) return false
-  }
   if (!p.labels.every((l) => {
     const [k, v] = l.split('=')
     return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
@@ -305,8 +311,6 @@ function create() {
         name: poolNameOf(p, i),
         count: p.count,
         specs: JSON.parse(JSON.stringify(p.specs)),
-        loginMode: p.loginMode,
-        ...(p.loginMode === 'keypair' ? { keyPairId: p.keyPairId } : {}),
         image: p.image,
         labels: [...p.labels],
         taints: p.taints.filter((t) => t.key).map((t) => ({ ...t })),
@@ -427,7 +431,7 @@ function create() {
             </div>
 
             <div class="ar-field" style="margin-bottom: var(--space-3)">
-              <span class="ar-field-label">Cluster Size</span>
+              <span class="ar-field-label">Cluster Size<span class="req">*</span><InfoTip text="Sets the size of the cluster. It decides how many worker nodes the cluster can manage and the hardware of the control plane nodes. You can make it larger after creation, but you cannot make it smaller." /></span>
             </div>
             <div class="seg" style="margin-bottom: var(--space-4)">
               <button :class="{ on: typeView === 'card' }" @click="typeView = 'card'">Card</button>
@@ -446,7 +450,7 @@ function create() {
                 >Nodes: {{ fmtIRR(p.maxNodes) }}</button>
               </div>
               <p class="scale-note">
-                Select the maximum number of nodes that can be managed by the cluster. The scale of a cluster determines the flavor of the master nodes. After the cluster is created, you can upgrade the flavor of the master nodes, <strong>but you cannot downgrade it.</strong>
+                Select the maximum number of nodes that can be managed by the cluster. The scale of a cluster determines the flavor of the control plane nodes. After the cluster is created, you can upgrade the flavor of the control plane nodes, <strong>but you cannot downgrade it.</strong>
               </p>
               <p class="scale-note">
                 Typically, a cluster may not achieve the maximum node count within the selected scale due to factors such as the type, quantity, and size of resource objects within the cluster, as well as the volume of access requests from external systems to kube-apiserver. To prevent cluster overload, strengthen the cluster by monitoring its resource usage.
@@ -463,10 +467,10 @@ function create() {
               >
                 <span class="radio"></span>
                 <div class="t-name">{{ p.name }}</div>
-                <div class="t-spec"><span class="ts-k">Replica</span><span class="ts-v">{{ p.replicas }}</span></div>
-                <div class="t-spec"><span class="ts-k">Max Nodes</span><span class="ts-v">{{ p.maxNodes }}</span></div>
-                <div class="t-spec"><span class="ts-k">Max etcd Size</span><span class="ts-v">{{ p.etcdSize }}</span></div>
-                <div class="t-spec t-price"><span class="ts-k">Price</span><span class="ts-v">{{ fmtIRR(p.pricePerDay) }} IRR/Day</span></div>
+                <div class="t-spec"><span class="ts-k">Replica<InfoTip :text="SPEC_TIPS.replica" /></span><span class="ts-v">{{ p.replicas }}</span></div>
+                <div class="t-spec"><span class="ts-k">Max Nodes<InfoTip :text="SPEC_TIPS.maxNodes" /></span><span class="ts-v">{{ p.maxNodes }}</span></div>
+                <div class="t-spec"><span class="ts-k">Max etcd Size<InfoTip :text="SPEC_TIPS.etcd" /></span><span class="ts-v">{{ p.etcdSize }}</span></div>
+                <div class="t-spec t-price"><span class="ts-k">Price</span><span class="ts-v">{{ fmtIRR(p.pricePerDay * 30) }} IRR/Month</span></div>
               </div>
             </div>
 
@@ -488,7 +492,7 @@ function create() {
                     <td class="text-body-2">{{ p.replicas }}</td>
                     <td class="text-body-2">{{ p.maxNodes }}</td>
                     <td class="text-body-2">{{ p.etcdSize }}</td>
-                    <td class="text-body-2">{{ fmtIRR(p.pricePerDay) }} IRR/Day</td>
+                    <td class="text-body-2">{{ fmtIRR(p.pricePerDay * 30) }} IRR/Month</td>
                   </tr>
                 </tbody>
               </table>
@@ -496,7 +500,7 @@ function create() {
 
             <!-- Master distribution -->
             <div class="ar-field" style="margin-top: var(--space-6); max-width: 640px">
-              <span class="ar-field-label">Master Distribution<span class="req">*</span></span>
+              <span class="ar-field-label">Master Distribution<span class="req">*</span><InfoTip text="Sets where the control plane nodes run. Multi AZ: the nodes run in different availability zones, so the cluster still works if one zone has a problem. Single AZ: all nodes run in one availability zone that you select." /></span>
               <div class="dist-rows">
                 <div class="dist-row">
                   <div class="seg dist-seg">
@@ -521,20 +525,8 @@ function create() {
                       <input type="radio" name="master-host-az" value="simin" v-model="masterHostAz" /> Simin
                     </label>
                   </div>
-                  <p class="scale-note">
-                    After you customize AZ for your cluster's master nodes, the platform will create the master nodes based on the node distribution policy.
-                  </p>
                   <p class="scale-note warn-note">
-                    Insufficient resources in the specified AZ may cause the master node creation to fail, affecting the overall cluster creation process.
-                  </p>
-                </template>
-
-                <template v-else>
-                  <p class="scale-note">
-                    The system will make the best effort to create master nodes in different AZs for cluster DR. However, if the number of available AZs is less than the number of nodes to be created, the platform will create the nodes in the AZs with sufficient resources to preferentially ensure cluster creation. In this case, AZ-level DR may not be ensured.
-                  </p>
-                  <p class="scale-note warn-note">
-                    Available AZs in the current region: Forough, Bamdad, Simin.
+                    Insufficient resources in the specified AZ may cause the control plane node creation to fail, affecting the overall cluster creation process.
                   </p>
                 </template>
               </div>
@@ -544,7 +536,7 @@ function create() {
               <label>Kubernetes Version<span class="req">*</span></label>
               <ArSelectMenu
                 v-model="draft.version"
-                :options="VERSIONS.map((v) => ({ value: v.id, label: v.patch }))"
+                :options="VERSIONS.map((v) => ({ value: v.id, label: `${v.patch} (end of cycle: ${v.endOfCycle})` }))"
                 aria-label="Kubernetes Version"
               />
               <div class="banner info" style="margin-top: var(--space-2)">
@@ -563,7 +555,7 @@ function create() {
 
             <div class="net-block">
               <div class="collapse-head static" style="padding: var(--space-4) 0">
-                <span class="text-body-1">Cluster Network<span class="req">*</span></span>
+                <span class="text-body-1">Cluster Network<span class="req">*</span><InfoTip :text="NETWORK_TIPS.cluster" /></span>
               </div>
               <div style="display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-6)">
                 <div class="ar-field" style="max-width: 520px">
@@ -627,7 +619,7 @@ function create() {
 
             <div class="net-block" style="border-top: 0; padding-top: var(--space-2)">
               <div class="collapse-head static" style="padding: var(--space-4) 0">
-                <span class="text-body-1">Container Network<span class="req">*</span></span>
+                <span class="text-body-1">Pod Network<span class="req">*</span><InfoTip :text="NETWORK_TIPS.pod" /></span>
               </div>
               <div style="display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-6)">
                 <div v-for="(row, i) in draft.podCidrs" :key="i" class="cidr-row">
@@ -655,7 +647,7 @@ function create() {
                   </div>
                 </div>
                 <p class="text-caption-1 muted" style="margin: var(--space-1) 0 0">
-                  The container CIDR block is the IP address range for Kubernetes Pods. The current CIDR block supports a maximum of
+                  The pod CIDR block is the IP address range for Kubernetes Pods. The current CIDR block supports a maximum of
                   <strong class="cidr-cap">{{ cidrCapacity(draft.podCidrs[0]) }}</strong> Pods.
                 </p>
                 <div class="banner warning" style="margin-top: var(--space-1)">
@@ -671,7 +663,7 @@ function create() {
 
             <div class="net-block" style="border-top: 0">
               <div class="collapse-head static" style="padding: var(--space-4) 0">
-                <span class="text-body-1">Service Network<span class="req">*</span></span>
+                <span class="text-body-1">Service Network<span class="req">*</span><InfoTip :text="NETWORK_TIPS.service" /></span>
               </div>
               <div style="display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-6)">
                 <div v-for="(row, i) in draft.svcCidrs" :key="i" class="cidr-row">
@@ -693,7 +685,7 @@ function create() {
                     <ArSelectMenu
                       class="oct-box sel oct-prefix"
                       v-model="row.prefix"
-                      :options="['8','12','16','17','18','20','22','24','26','28']"
+                      :options="['8','12','16','17','18','20']"
                       aria-label="Prefix"
                     />
                   </div>
@@ -850,8 +842,7 @@ function create() {
                       · {{ [...new Set(p.specs[0]?.zones || [])].map(zoneName).join(', ') || 'no zones' }}
                     </div>
                     <div class="rv-pool-line muted">
-                      {{ p.loginMode === 'password' ? 'Password' : `Key Pair · ${KEY_PAIRS.find((k) => k.id === p.keyPairId)?.name || p.keyPairId}` }}
-                      · {{ p.image }}
+                      {{ p.image }}
                       <template v-if="p.labels.length"> · {{ p.labels.length }} label{{ p.labels.length === 1 ? '' : 's' }}</template>
                       <template v-if="p.taints.length"> · {{ p.taints.length }} taint{{ p.taints.length === 1 ? '' : 's' }}</template>
                     </div>
@@ -866,8 +857,7 @@ function create() {
               <div class="rv-inst-body">
                 <strong>Instructions</strong>
                 <ul>
-                  <li>The following cannot be modified after creation: master node count, region, VPC, and Pod/Service CIDR blocks.</li>
-                  <li>Node SSH passwords cannot be retrieved after creation — keep them safe.</li>
+                  <li>The following cannot be modified after creation: control plane node count, region, VPC, and Pod/Service CIDR blocks.</li>
                 </ul>
               </div>
             </div>
@@ -946,11 +936,6 @@ function create() {
                 <p v-for="(p, i) in draft.pools" :key="p.id">
                   {{ poolNameOf(p, i) }} · {{ p.specs[0]?.flavorId || 'no flavor' }} × {{ p.count || '—' }}
                   <span v-if="!poolStates[i]" class="rail-err">· incomplete</span>
-                </p>
-                <p>Login:
-                  <template v-for="(p, i) in draft.pools" :key="p.id">
-                    {{ i ? ' | ' : ' ' }}{{ p.loginMode === 'password' ? 'Password' : `Key Pair${p.keyPairId ? ` · ${KEY_PAIRS.find((k) => k.id === p.keyPairId)?.name}` : ''}` }}
-                  </template>
                 </p>
               </template>
               <p v-else>No node pools configured.</p>

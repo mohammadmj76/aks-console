@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
 import {
-  REGION, FLAVOR_CATALOG, FLAVOR_CATEGORIES, KEY_PAIRS, fmtIRR,
+  REGION, FLAVOR_CATALOG, FLAVOR_CATEGORIES, fmtIRR,
 } from '../../data'
 import ArCheckbox from '../ui/ArCheckbox.vue'
 import ArSelectMenu from '../ui/ArSelectMenu.vue'
@@ -32,12 +32,6 @@ const missingItems = computed(() => {
   if (!p.specs.length) items.push('Flavor: pick one from the flavor table')
   else if (!p.specs[0].zones.length) items.push('Availability zone: select at least one zone for the chosen flavor')
   if (!(Number.isInteger(p.count) && p.count >= 1 && p.count <= 20)) items.push('Node count: between 1 and 20')
-  if (p.loginMode === 'keypair') {
-    if (!p.keyPairId) items.push('SSH key pair: select one from the list')
-  } else {
-    if (p.password.length < 8) items.push('SSH password: at least 8 characters')
-    if (p.passwordConfirm !== p.password) items.push('Password confirmation: must match the password')
-  }
   if (p.labels.length && !p.labels.every((l) => {
     const [k, v] = l.split('=')
     return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
@@ -132,20 +126,6 @@ function specToggleZone(zoneId, f) {
   i >= 0 ? zones.splice(i, 1) : zones.push(zoneId)
 }
 
-/* ---------------- login mode ---------------- */
-const keyPairOptions = [
-  { value: '', label: 'Select an SSH key pair…' },
-  ...KEY_PAIRS.map((key) => ({ value: key.id, label: key.name })),
-]
-const selectedKeyPair = computed(() => KEY_PAIRS.find((key) => key.id === props.pool.keyPairId))
-function setLoginMode(mode) {
-  if (props.pool.loginMode === mode) return
-  props.pool.loginMode = mode
-  props.pool.password = ''
-  props.pool.passwordConfirm = ''
-  props.pool.keyPairId = ''
-}
-
 /* ---------------- advanced settings ---------------- */
 const advOpen = ref(false)
 const IMAGES = [
@@ -156,14 +136,45 @@ const IMAGES = [
 const K8S_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?(\/[a-z0-9]([a-z0-9-.]*[a-z0-9])?)?$/
 const K8S_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
 const nodeLabelInput = ref('')
+const nodeLabelError = ref('')
 const nodeLabelOk = computed(() => props.pool.labels.every((l) => {
   const [k, v] = l.split('=')
   return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
 }))
-function addNodeLabel() {
+/* live check on the text being typed, so a bad label is visible before Enter */
+const nodeLabelPendingOk = computed(() => {
   const v = nodeLabelInput.value.trim().replace(/\s+/g, '')
-  if (v && v.includes('=') && !props.pool.labels.includes(v) && props.pool.labels.length < 20) props.pool.labels.push(v)
+  if (!v) return true
+  const [k, val] = v.split('=')
+  return v.includes('=') && K8S_KEY.test(k) && val !== undefined && K8S_VAL.test(val) && k.length <= 63 && val.length <= 63
+})
+function addNodeLabel(e) {
+  /* read the DOM value at Enter time: the ref can lag behind while an IME
+     composition is still open (Persian keyboards, mobile keyboards) */
+  const raw = e && e.target ? e.target.value : nodeLabelInput.value
+  const v = raw.trim().replace(/\s+/g, '')
+  nodeLabelError.value = ''
+  if (!v) {
+    /* nothing typed */
+  } else if (!v.includes('=')) {
+    nodeLabelError.value = 'Use the key=value format. Example: team=backend.'
+  } else if (props.pool.labels.includes(v)) {
+    nodeLabelError.value = 'This label is already added.'
+  } else if (props.pool.labels.length >= 20) {
+    nodeLabelError.value = 'You can add up to 20 labels per pool.'
+  } else {
+    props.pool.labels.push(v)
+  }
   nodeLabelInput.value = ''
+  if (e && e.target) e.target.value = ''
+}
+/* plain keydown handler: ignore the Enter that commits an IME composition,
+   so the text stays in the box and the next Enter adds the label */
+function onNodeLabelKeydown(e) {
+  if (e.key !== 'Enter') return
+  if (e.isComposing || e.keyCode === 229) return
+  e.preventDefault()
+  addNodeLabel(e)
 }
 function removeNodeLabel(l) {
   props.pool.labels = props.pool.labels.filter((x) => x !== l)
@@ -209,6 +220,9 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       </div>
       <span v-if="!open && !ok" class="pool-badge" :title="`Missing: ${missingShort}`">
         <span class="dot"></span> Incomplete
+      </span>
+      <span v-else-if="!open && ok" class="pool-badge ok">
+        <span class="dot"></span> Complete
       </span>
       <button
         class="pool-del"
@@ -386,51 +400,6 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         </span>
       </div>
 
-      <!-- login mode (required) -->
-      <div class="ar-field" style="max-width: 640px">
-        <span class="ar-field-label">Login Mode<span class="req">*</span></span>
-        <div class="dist-rows">
-          <div class="dist-row">
-            <div class="seg dist-seg">
-              <button :class="{ on: pool.loginMode === 'password' }" @click="setLoginMode('password')">Password</button>
-              <button :class="{ on: pool.loginMode === 'keypair' }" @click="setLoginMode('keypair')">Key Pair</button>
-            </div>
-          </div>
-          <template v-if="pool.loginMode === 'password'">
-            <div class="dist-row" style="flex-wrap: nowrap">
-              <span class="dist-k" style="width: 90px">Username</span>
-              <span class="text-body-2-strong">root</span>
-            </div>
-            <div class="dist-row" style="flex-wrap: nowrap">
-              <span class="dist-k" style="width: 90px">Password</span>
-              <div class="ar-input" style="flex: 1; max-width: 250px" :class="{ 'error-mode': pool.password && pool.password.length < 8 }">
-                <input v-model="pool.password" type="password" placeholder="Enter a password." autocomplete="new-password" />
-              </div>
-              <div class="ar-input" style="flex: 1; max-width: 250px" :class="{ 'error-mode': pool.passwordConfirm && pool.passwordConfirm !== pool.password }">
-                <input v-model="pool.passwordConfirm" type="password" placeholder="Confirm the password." autocomplete="new-password" />
-              </div>
-            </div>
-            <span v-if="pool.password && pool.password.length < 8" class="error-text">Password must be at least 8 characters.</span>
-            <span v-else-if="pool.passwordConfirm && pool.passwordConfirm !== pool.password" class="error-text">Passwords do not match.</span>
-            <p class="scale-note muted">The password is used to log in to the nodes of this pool over SSH.</p>
-          </template>
-          <div v-else class="key-pair-panel">
-            <span class="ar-field-label">Key Pair<span class="req">*</span></span>
-            <ArSelectMenu
-              v-model="pool.keyPairId"
-              :options="keyPairOptions"
-              searchable
-              search-placeholder="Search key pairs…"
-              empty-text="No key pairs found"
-              aria-label="SSH key pair"
-              style="width: 100%; max-width: 380px"
-            />
-            <p class="scale-note muted">Select a project SSH key to access the nodes in this pool. Keep the matching private key on your device.</p>
-            <span v-if="pool.specs.length && !selectedKeyPair" class="error-text">Select an SSH key pair to continue.</span>
-          </div>
-        </div>
-      </div>
-
       <!-- advanced settings (optional) -->
       <button class="adv-toggle" @click="advOpen = !advOpen">
         Advanced Settings (Optional)
@@ -475,10 +444,12 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
                 v-model="nodeLabelInput"
                 placeholder="key=value"
                 spellcheck="false"
-                @keydown.enter.prevent="addNodeLabel"
+                @input="nodeLabelError = ''"
+                @keydown="onNodeLabelKeydown"
               />
             </div>
-            <span v-if="nodeLabelInput && !nodeLabelOk" class="error-text">Use key=value — lowercase keys (letters, digits, -, .), values up to 63 characters.</span>
+            <span v-if="nodeLabelError" class="error-text">{{ nodeLabelError }}</span>
+            <span v-else-if="nodeLabelInput && !nodeLabelPendingOk" class="error-text">Use the key=value format: lowercase keys with letters, digits, - and . Values up to 63 characters.</span>
             <span v-else class="hint">Applied as Kubernetes labels to every node of this pool. Press Enter after each label. Up to 20.</span>
           </div>
         </div>
@@ -547,6 +518,8 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
   border-radius: var(--radius-circular); padding: 3px 10px;
 }
 .pool-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bg-error-t1-1-default); }
+.pool-badge.ok { color: var(--fg-success-t1-1-default); background: var(--bg-success-t3-1-default); }
+.pool-badge.ok .dot { background: var(--bg-success-t1-1-default); }
 .pool-del {
   flex: none; display: inline-flex; align-items: center; gap: 4px;
   border: 0; background: none; cursor: pointer; font: inherit; font-size: 12.5px;
@@ -581,13 +554,6 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
   padding: var(--space-4) var(--space-6) var(--space-6);
   display: flex; flex-direction: column; gap: var(--space-3);
 }
-.key-pair-panel {
-  display: flex; flex-direction: column; gap: var(--space-3); min-width: 0;
-  padding: var(--space-5); margin-top: var(--space-2);
-  border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md);
-}
-.key-pair-panel > .ar-field-label { font-size: 12px; font-weight: 450; }
-.key-pair-panel .scale-note { margin: 0; }
 .check-line {
   display: inline-flex; align-items: center; gap: var(--space-2);
   font-size: 13px; color: var(--fg-neutral-t1-2-default); cursor: pointer;

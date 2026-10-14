@@ -164,6 +164,7 @@
 
 /* events tab toolbar */
 .ev-toolbar { display: flex; gap: var(--space-3); align-items: center; margin-bottom: var(--space-4); flex-wrap: wrap; }
+.ev-toolbar .asm-trigger { height: 34px; } /* match the 34px search input and time-range select */
 .ev-search { flex: 1; min-width: 220px; height: 34px; }
 .sort-ico { color: var(--fg-neutral-t1-3-default); font-size: 10px; margin-left: 4px; }
 

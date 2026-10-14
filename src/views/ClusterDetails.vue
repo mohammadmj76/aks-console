@@ -51,7 +51,7 @@ watch(
   }
 )
 
-/* ---------------- overview: master nodes table ---------------- */
+/* ---------------- overview: control plane nodes table ---------------- */
 const monitorPanel = ref(false)
 const monitorNode = ref(null)
 
@@ -80,7 +80,7 @@ const masterNodes = computed(() => {
   const count = ha ? 3 : 1
   const seed = cluster.value?.id.length || 7
   return Array.from({ length: count }, (_, i) => ({
-    name: `${cluster.value?.name || 'cluster'}-master-${count - i}`,
+    name: `${cluster.value?.name || 'cluster'}-cp-${count - i}`,
     status: cluster.value?.status === 'error' && i === 0 ? 'Unreachable' : 'Running',
     az: ha ? zones[i % zones.length].name : zones[0].name,
     cpu: Math.round(((cluster.value?.usage.cpu || 18) * (0.55 + ((seed * 7 + i * 13) % 30) / 100)) * 100) / 100,
@@ -89,10 +89,23 @@ const masterNodes = computed(() => {
 })
 
 /* ---------------- monitoring tab ---------------- */
-const monObject = ref('Cluster (masters average)')
+const monObject = ref('')
 const monPeriod = ref('Last 1 hour')
 const PERIOD_HOURS = { 'Last 1 hour': 1, 'Last 6 hours': 6, 'Last 24 hours': 24 }
-const monObjects = computed(() => ['Cluster (masters average)', ...masterNodes.value.map((m) => m.name)])
+/* monitoring targets: every control plane and worker node, one by one */
+const monObjects = computed(() => {
+  const cp = masterNodes.value.map((m) => ({ value: m.name, label: m.name, group: 'Control Plane' }))
+  const pools = cluster.value?.pools || []
+  const suffix = pools.length > 1
+  const workers = pools.flatMap((p) =>
+    nodesOf(p).map((n) => ({ value: n.name, label: suffix ? `${n.name} · ${p.name}` : n.name, group: 'Worker Nodes' }))
+  )
+  return [...cp, ...workers]
+})
+/* keep the selection valid when the node list changes (or on first load) */
+watch(monObjects, (opts) => {
+  if (!opts.some((o) => o.value === monObject.value)) monObject.value = opts[0]?.value || ''
+}, { immediate: true })
 
 /* per-object base load derived deterministically from its name */
 const monLevel = computed(() => {
@@ -177,6 +190,39 @@ const monCharts = computed(() => {
 const evTab = ref('om')
 const evQuery = ref('')
 const evRange = ref('all')
+/* filters: O&M has level + event name; Kubernetes events have type + object + event name */
+const evLevel = ref('all')
+const evOmName = ref('all')
+const evType = ref('all')
+const evObject = ref('all')
+const evK8sName = ref('all')
+
+function switchEvTab(t) {
+  evTab.value = t
+  evQuery.value = ''
+  evLevel.value = 'all'
+  evOmName.value = 'all'
+  evType.value = 'all'
+  evObject.value = 'all'
+  evK8sName.value = 'all'
+}
+const evFiltered = computed(
+  () =>
+    evQuery.value.trim() !== '' ||
+    evLevel.value !== 'all' ||
+    evOmName.value !== 'all' ||
+    evType.value !== 'all' ||
+    evObject.value !== 'all' ||
+    evK8sName.value !== 'all'
+)
+function resetEvFilters() {
+  evQuery.value = ''
+  evLevel.value = 'all'
+  evOmName.value = 'all'
+  evType.value = 'all'
+  evObject.value = 'all'
+  evK8sName.value = 'all'
+}
 
 /* O&M events: control-plane / platform events (mock, 30-day retention) */
 const omEvents = computed(() => {
@@ -189,9 +235,16 @@ const omEvents = computed(() => {
   }))
   const q = evQuery.value.trim().toLowerCase()
   return base.filter(
-    (e) => !q || e.name.toLowerCase().includes(q) || e.remarks.toLowerCase().includes(q)
+    (e) =>
+      (evLevel.value === 'all' || e.level === evLevel.value) &&
+      (evOmName.value === 'all' || e.name === evOmName.value) &&
+      (!q || e.name.toLowerCase().includes(q) || e.remarks.toLowerCase().includes(q))
   )
 })
+const omNameOptions = computed(() => [
+  { value: 'all', label: 'All Events' },
+  ...[...new Set((store.events[cluster.value?.id] || []).map((e) => e.reason))].map((n) => ({ value: n, label: n })),
+])
 
 /* Kubernetes events: workload-level events (mock, 1-hour retention) */
 const K8S_EVENT_POOL = [
@@ -207,9 +260,24 @@ const K8S_EVENT_POOL = [
 const k8sEvents = computed(() => {
   const q = evQuery.value.trim().toLowerCase()
   return K8S_EVENT_POOL.filter(
-    (e) => !q || e.name.toLowerCase().includes(q) || e.msg.toLowerCase().includes(q) || e.obj.toLowerCase().includes(q)
+    (e) =>
+      (evType.value === 'all' || e.type === evType.value) &&
+      (evObject.value === 'all' || e.object === evObject.value) &&
+      (evK8sName.value === 'all' || e.name === evK8sName.value) &&
+      (!q || e.name.toLowerCase().includes(q) || e.msg.toLowerCase().includes(q) || e.obj.toLowerCase().includes(q))
   )
 })
+const k8sObjectOptions = [
+  { value: 'all', label: 'All Objects' },
+  ...[...new Set(K8S_EVENT_POOL.map((e) => e.object))].map((n) => ({ value: n, label: n })),
+]
+const k8sNameOptions = [
+  { value: 'all', label: 'All Events' },
+  ...[...new Set(K8S_EVENT_POOL.map((e) => e.name))].map((n) => ({ value: n, label: n })),
+]
+const evTotal = computed(() =>
+  evTab.value === 'om' ? (store.events[cluster.value?.id] || []).length : K8S_EVENT_POOL.length
+)
 
 function exportExcel() {
   const rows = evTab.value === 'om' ? omEvents.value : k8sEvents.value
@@ -240,8 +308,10 @@ function poolFlavorIds(pool) {
 }
 function nodesOf(pool) {
   const flavors = poolFlavorIds(pool)
+  /* pool.id is a string — hash it so each node gets a unique, stable suffix */
+  const seed = [...pool.id].reduce((a, c) => a + c.charCodeAt(0), 0)
   return Array.from({ length: pool.count }, (_, i) => ({
-    name: `${pool.name}-${(pool.id + i * 7919).toString(36).slice(0, 5)}`,
+    name: `${pool.name}-${(seed + i * 7919).toString(36).slice(0, 5)}`,
     flavor: flavors[i % flavors.length],
     zone: pool.zones.length ? pool.zones[i % pool.zones.length] : REGION.zones[i % REGION.zones.length].id,
     ip: `172.31.${(parseInt(pool.id.slice(-1), 36) % 9) + 1}.${10 + i}`,
@@ -264,10 +334,34 @@ const poolMetaOk = computed(() =>
   }) && poolForm.taints.every((t) => K8S_KEY.test(t.key) && (t.value === '' || K8S_VAL.test(t.value)))
 )
 const poolLabelInput = ref('')
-function addPoolLabel() {
-  const v = poolLabelInput.value.trim().replace(/\s+/g, '')
-  if (v && v.includes('=') && !poolForm.labels.includes(v) && poolForm.labels.length < 20) poolForm.labels.push(v)
+const poolLabelError = ref('')
+function addPoolLabel(e) {
+  /* read the DOM value at Enter time: the ref can lag behind while an IME
+     composition is still open (Persian keyboards, mobile keyboards) */
+  const raw = e && e.target ? e.target.value : poolLabelInput.value
+  const v = raw.trim().replace(/\s+/g, '')
+  poolLabelError.value = ''
+  if (!v) {
+    /* nothing typed */
+  } else if (!v.includes('=')) {
+    poolLabelError.value = 'Use the key=value format. Example: team=backend.'
+  } else if (poolForm.labels.includes(v)) {
+    poolLabelError.value = 'This label is already added.'
+  } else if (poolForm.labels.length >= 20) {
+    poolLabelError.value = 'You can add up to 20 labels per pool.'
+  } else {
+    poolForm.labels.push(v)
+  }
   poolLabelInput.value = ''
+  if (e && e.target) e.target.value = ''
+}
+/* ignore the Enter that commits an IME composition, so the text stays in
+   the box and the next Enter adds the label */
+function onPoolLabelKeydown(e) {
+  if (e.key !== 'Enter') return
+  if (e.isComposing || e.keyCode === 229) return
+  e.preventDefault()
+  addPoolLabel(e)
 }
 function removePoolLabel(l) {
   poolForm.labels = poolForm.labels.filter((x) => x !== l)
@@ -474,12 +568,12 @@ function menuAction(item) {
         <div class="ar-card chart-card" style="padding: var(--space-6)">
           <div class="head">
             <div>
-              <h3 class="text-title-3" style="margin: 0">Master Nodes</h3>
+              <h3 class="text-title-3" style="margin: 0">Control Plane Nodes</h3>
             </div>
           </div>
           <div class="banner info" style="margin-bottom: var(--space-4); align-items: flex-start">
             <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
-            <span>Overload control enabled. An overloaded master node rejects external traffic proportionally based on the overload level.</span>
+            <span>Overload control enabled. An overloaded control plane node rejects external traffic proportionally based on the overload level.</span>
           </div>
           <div class="table-scroll">
             <table class="ar-table">
@@ -639,7 +733,13 @@ function menuAction(item) {
         <div style="display: flex; gap: var(--space-4); flex-wrap: wrap">
           <div class="ar-field" style="margin: 0; width: 300px">
             <span class="ar-field-label">Select Object</span>
-            <ArSelectMenu v-model="monObject" :options="monObjects" aria-label="Select Object" />
+            <ArSelectMenu
+              v-model="monObject"
+              :options="monObjects"
+              searchable
+              search-placeholder="Search nodes…"
+              aria-label="Select Object"
+            />
           </div>
           <div class="ar-field" style="margin: 0; width: 170px">
             <span class="ar-field-label">Select Period</span>
@@ -655,8 +755,7 @@ function menuAction(item) {
       </div>
 
       <p class="text-caption-1 muted" style="margin-top: var(--space-3)">
-        Control-plane metrics · sampled every 60 seconds · 30-day retention. The cluster view shows the average across
-        {{ masterNodes.length }} master node{{ masterNodes.length === 1 ? '' : 's' }}; pick a node above for its individual curves.
+        Node metrics · sampled every 60 seconds · 30-day retention. Pick a control plane or worker node above to see its individual curves.
       </p>
     </template>
 
@@ -715,8 +814,8 @@ function menuAction(item) {
     <template v-if="tab === 'events'">
       <div class="ar-card" style="padding: var(--space-6)">
         <nav class="ar-tabs" style="margin-bottom: var(--space-5)">
-          <button class="ar-tab" :class="{ active: evTab === 'om' }" @click="evQuery = ''; evTab = 'om'">O&amp;M Events</button>
-          <button class="ar-tab" :class="{ active: evTab === 'k8s' }" @click="evQuery = ''; evTab = 'k8s'">Kubernetes Event</button>
+          <button class="ar-tab" :class="{ active: evTab === 'om' }" @click="switchEvTab('om')">O&amp;M Events</button>
+          <button class="ar-tab" :class="{ active: evTab === 'k8s' }" @click="switchEvTab('k8s')">Kubernetes Event</button>
         </nav>
 
         <div v-if="evTab === 'om'" class="banner info" style="margin-bottom: var(--space-4); align-items: flex-start">
@@ -729,19 +828,53 @@ function menuAction(item) {
         </div>
 
         <div class="ev-toolbar">
-          <div v-if="evTab === 'om'" class="ar-input" style="width: 160px; height: 34px">
-            <select v-model="evRange" aria-label="Time range">
-              <option value="all">All time</option>
-              <option value="1d">Last 1 day</option>
-              <option value="7d">Last 7 days</option>
-              <option value="15d">Last 15 days</option>
-            </select>
-            <svg class="chev" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
-          </div>
+          <template v-if="evTab === 'om'">
+            <div class="ar-input" style="width: 150px; height: 34px">
+              <select v-model="evRange" aria-label="Time range">
+                <option value="all">All time</option>
+                <option value="1d">Last 1 day</option>
+                <option value="7d">Last 7 days</option>
+                <option value="15d">Last 15 days</option>
+              </select>
+              <svg class="chev" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
+            </div>
+            <ArSelectMenu
+              v-model="evLevel"
+              style="width: 140px"
+              :options="[{ value: 'all', label: 'All Levels' }, { value: 'Warning', label: 'Warning' }, { value: 'Info', label: 'Info' }]"
+              aria-label="Filter by level"
+            />
+            <ArSelectMenu
+              v-model="evOmName"
+              style="width: 200px"
+              :options="omNameOptions"
+              searchable
+              search-placeholder="Search events…"
+              aria-label="Filter by event name"
+            />
+          </template>
+          <template v-else>
+            <ArSelectMenu
+              v-model="evType"
+              style="width: 130px"
+              :options="[{ value: 'all', label: 'All Types' }, { value: 'Alarm', label: 'Alarm' }, { value: 'Normal', label: 'Normal' }]"
+              aria-label="Filter by type"
+            />
+            <ArSelectMenu v-model="evObject" style="width: 150px" :options="k8sObjectOptions" aria-label="Filter by object" />
+            <ArSelectMenu
+              v-model="evK8sName"
+              style="width: 200px"
+              :options="k8sNameOptions"
+              searchable
+              search-placeholder="Search events…"
+              aria-label="Filter by event name"
+            />
+          </template>
           <label class="ar-input ev-search">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
             <input v-model="evQuery" type="search" placeholder="Select a property or enter a keyword." />
           </label>
+          <button v-if="evFiltered" class="link-btn" @click="resetEvFilters">Reset filters</button>
           <ArButton variant="secondary" sm @click="exportExcel">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m0 0 3-3M8 10 5 7M3 13h10"/></svg>
             Export
@@ -810,7 +943,7 @@ function menuAction(item) {
         </div>
 
         <p class="text-caption-1 muted" style="margin: var(--space-3) 0 0">
-          Total Records: {{ evTab === 'om' ? omEvents.length : k8sEvents.length }}
+          Total Records: {{ evTab === 'om' ? omEvents.length : k8sEvents.length }}<template v-if="evFiltered"> of {{ evTotal }} (filtered)</template>
         </p>
       </div>
     </template>
@@ -940,9 +1073,10 @@ function menuAction(item) {
               <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
             </button>
           </span>
-          <input v-model="poolLabelInput" placeholder="key=value" spellcheck="false" @keydown.enter.prevent="addPoolLabel" />
+          <input v-model="poolLabelInput" placeholder="key=value" spellcheck="false" @input="poolLabelError = ''" @keydown="onPoolLabelKeydown" />
         </div>
-        <span v-if="poolForm.labels.length && !poolMetaOk" class="error-text">Use key=value — lowercase keys, values up to 63 characters.</span>
+        <span v-if="poolLabelError" class="error-text">{{ poolLabelError }}</span>
+        <span v-else-if="poolForm.labels.length && !poolMetaOk" class="error-text">Use the key=value format: lowercase keys, values up to 63 characters.</span>
         <span v-else class="hint">Applied as Kubernetes labels to every node of this pool. Press Enter after each label.</span>
       </div>
 
