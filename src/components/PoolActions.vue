@@ -237,7 +237,7 @@ function onSelect(item) {
   display: flex; flex-direction: column; gap: var(--space-2);
   padding: var(--space-4) var(--space-5);
   background: var(--bg-neutral-t1-4-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
 }
 .rs-k { font-size: 12px; color: var(--fg-neutral-t1-3-default); }
 .rs-nums { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
@@ -249,5 +249,5 @@ function onSelect(item) {
    inline-flex .count-input — pin it to its natural width (matches the
    compact node-count control on the pool cards) */
 .count-input { width: fit-content; }
-.count-input.error-mode { border-color: var(--bg-error-t1-1-default); }
+.count-input.error-mode { border-color: var(--bg-error-t3-1-default); }
 </style>

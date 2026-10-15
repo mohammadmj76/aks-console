@@ -10,7 +10,7 @@ import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
 import DonutGauge from '../components/ui/DonutGauge.vue'
 import ArProgress from '../components/ui/ArProgress.vue'
-import ArSelectMenu from '../components/ui/ArSelectMenu.vue'
+import ArSelect from '../components/ui/ArSelect.vue'
 import ArEmpty from '../components/ui/ArEmpty.vue'
 import ActionMenu from '../components/ui/ActionMenu.vue'
 import PoolActions from '../components/PoolActions.vue'
@@ -116,10 +116,10 @@ const monLevel = computed(() => {
 const monTimes = computed(() => genTimes(PERIOD_HOURS[monPeriod.value] || 1, 40))
 
 const CHART_COLORS = {
-  primary: 'var(--bg-primary-t1-1-default)',
-  green: 'var(--bg-success-t1-1-default)',
+  primary: 'var(--bg-primary-t3-1-default)',
+  green: 'var(--bg-success-t3-1-default)',
   amber: 'var(--bg-warning-t1-1-default)',
-  blue: 'var(--bg-info-t1-1-default)',
+  blue: 'var(--bg-info-t3-1-default)',
   violet: 'var(--fg-violet-t1-1-default)',
 }
 
@@ -628,7 +628,7 @@ function menuAction(item) {
       </div>
 
       <div v-for="pool in cluster.pools" :key="pool.id" class="ar-card" style="margin-bottom: var(--space-4)">
-        <div style="display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--st-neutral-t1-1-default)">
+        <div style="display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--st-neutral-t1-5-default)">
           <div style="flex: 1; min-width: 0">
             <router-link
               :to="{ name: 'pool-details', params: { id: cluster.id, poolId: pool.id } }"
@@ -733,7 +733,7 @@ function menuAction(item) {
         <div style="display: flex; gap: var(--space-4); flex-wrap: wrap">
           <div class="ar-field" style="margin: 0; width: 300px">
             <span class="ar-field-label">Select Object</span>
-            <ArSelectMenu
+            <ArSelect
               v-model="monObject"
               :options="monObjects"
               searchable
@@ -743,7 +743,7 @@ function menuAction(item) {
           </div>
           <div class="ar-field" style="margin: 0; width: 170px">
             <span class="ar-field-label">Select Period</span>
-            <ArSelectMenu v-model="monPeriod" :options="Object.keys(PERIOD_HOURS)" aria-label="Select Period" />
+            <ArSelect v-model="monPeriod" :options="Object.keys(PERIOD_HOURS)" aria-label="Select Period" />
           </div>
         </div>
       </div>
@@ -838,13 +838,13 @@ function menuAction(item) {
               </select>
               <svg class="chev" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
             </div>
-            <ArSelectMenu
+            <ArSelect
               v-model="evLevel"
               style="width: 140px"
               :options="[{ value: 'all', label: 'All Levels' }, { value: 'Warning', label: 'Warning' }, { value: 'Info', label: 'Info' }]"
               aria-label="Filter by level"
             />
-            <ArSelectMenu
+            <ArSelect
               v-model="evOmName"
               style="width: 200px"
               :options="omNameOptions"
@@ -854,14 +854,14 @@ function menuAction(item) {
             />
           </template>
           <template v-else>
-            <ArSelectMenu
+            <ArSelect
               v-model="evType"
               style="width: 130px"
               :options="[{ value: 'all', label: 'All Types' }, { value: 'Alarm', label: 'Alarm' }, { value: 'Normal', label: 'Normal' }]"
               aria-label="Filter by type"
             />
-            <ArSelectMenu v-model="evObject" style="width: 150px" :options="k8sObjectOptions" aria-label="Filter by object" />
-            <ArSelectMenu
+            <ArSelect v-model="evObject" style="width: 150px" :options="k8sObjectOptions" aria-label="Filter by object" />
+            <ArSelect
               v-model="evK8sName"
               style="width: 200px"
               :options="k8sNameOptions"
@@ -1090,7 +1090,7 @@ function menuAction(item) {
             <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.value && !K8S_VAL.test(t.value) }">
               <input v-model="t.value" placeholder="Value" spellcheck="false" />
             </div>
-            <ArSelectMenu
+            <ArSelect
               class="taint-effect"
               style="width: 150px"
               v-model="t.effect"
@@ -1165,7 +1165,7 @@ function menuAction(item) {
 .ver-cta {
   display: inline-flex; align-items: center; gap: 6px;
   height: 30px; padding: 0 10px;
-  border: 1px solid var(--bg-primary-t1-1-default);
+  border: 1px solid var(--st-primary-t1-1-default);
   border-radius: var(--radius-md);
   background: var(--bg-neutral-t1-1-default);
   color: var(--fg-primary-t1-1-default);
@@ -1173,6 +1173,6 @@ function menuAction(item) {
   cursor: pointer; margin-top: var(--space-3);
   transition: background .15s;
 }
-.ver-cta:hover { background: var(--bg-primary-t3-1-default); }
+.ver-cta:hover { background: var(--bg-primary-t2-1-default); }
 .ver-cta svg { flex: none; }
 </style>

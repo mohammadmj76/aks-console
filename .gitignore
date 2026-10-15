@@ -3,3 +3,6 @@ dist
 .DS_Store
 *.local
 .screenshots/
+
+# Claude Code local config
+.claude/

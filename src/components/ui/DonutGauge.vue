@@ -15,7 +15,7 @@ const dash = computed(() => `${Math.min(100, Math.max(0, props.pct))} ${100 - Ma
       <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--bg-neutral-t1-4-default)" stroke-width="4" />
       <circle
         cx="21" cy="21" r="15.9" fill="none"
-        stroke="var(--bg-primary-t1-1-default)" stroke-width="4"
+        stroke="var(--bg-primary-t3-1-default)" stroke-width="4"
         stroke-linecap="round" pathLength="100"
         :stroke-dasharray="dash" transform="rotate(-90 21 21)"
       />

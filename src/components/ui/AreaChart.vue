@@ -37,12 +37,12 @@ const xlabels = computed(() => {
   <svg :viewBox="`0 0 ${W} ${H}`" style="display: block; width: 100%" role="img" aria-label="Usage chart">
     <defs>
       <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="var(--bg-primary-t1-1-default)" stop-opacity=".16" />
-        <stop offset="1" stop-color="var(--bg-primary-t1-1-default)" stop-opacity="0" />
+        <stop offset="0" stop-color="var(--bg-primary-t3-1-default)" stop-opacity=".16" />
+        <stop offset="1" stop-color="var(--bg-primary-t3-1-default)" stop-opacity="0" />
       </linearGradient>
     </defs>
     <g v-for="g in grid" :key="g.gv">
-      <line :x1="padL" :x2="W - 10" :y1="g.y" :y2="g.y" stroke="var(--st-neutral-t1-1-default)" stroke-width="1" />
+      <line :x1="padL" :x2="W - 10" :y1="g.y" :y2="g.y" stroke="var(--st-neutral-t1-5-default)" stroke-width="1" />
       <text :x="padL - 6" :y="g.y + 3" text-anchor="end" font-size="9" fill="var(--fg-neutral-t1-3-default)">{{ g.gv }}{{ max === 100 ? '%' : '' }}</text>
     </g>
     <text v-for="(xl, i) in xlabels" :key="i" :x="xl.x" :y="H - 6" text-anchor="middle" font-size="9" fill="var(--fg-neutral-t1-3-default)">{{ xl.l }}</text>

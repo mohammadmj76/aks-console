@@ -23,7 +23,7 @@ defineProps({ text: { type: String, required: true } })
   position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%) translateY(2px);
   width: 264px; padding: 10px 12px; border-radius: var(--radius-md);
   /* no inverse token exists — reuse the darkest foreground token as the bubble fill */
-  background: var(--fg-neutral-t1-1-default); color: var(--fg-neutral-t2-1-default);
+  background: var(--fg-neutral-t1-1-default); color: var(--fg-neutral-t3-0-default);
   font-size: 12px; font-weight: 400; letter-spacing: normal; line-height: 1.55; text-align: left;
   white-space: normal; opacity: 0; visibility: hidden; pointer-events: none;
   transition: opacity .12s ease, transform .12s ease; z-index: 60;

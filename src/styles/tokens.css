@@ -1,65 +1,250 @@
 /* ============================================================
-   Ar UIKit tokens — names follow the uikit MCP catalog
-   (bg/fg/st × semantic × tier × state). Hex values are the
-   Arvan console palette (teal primary) used across the product.
+   Ar UIKit tokens — names AND values from the real
+   @panel/uikit v11.1.0 (light theme):
+   src/scss/modules/color/_base.scss          (raw palette)
+   src/scss/modules/color/_directory-light.scss (semantic map)
+   src/scss/modules/color.scss                 (css-var mapping)
+   src/scss/modules/space.scss                 (spacing vars)
+   src/scss/variables/_sizes.scss              (radius scale)
+
+   Tier semantics (bg):
+     t1-1 = near-white surface   t2-1 = light tint   t3-1 = SOLID color
+   Tier semantics (fg/st):
+     t1-1 darkest → t1-5 lightest (per family)
+   White-on-color text is fg-neutral-t3-0-default (NOT t2-1).
    ============================================================ */
 :root {
-  /* bg */
-  --bg-neutral-t3-0-default: #f5f6f8;  /* page canvas        */
-  --bg-neutral-t1-1-default: #ffffff;  /* card surface       */
-  --bg-neutral-t1-4-default: #f0f2f5;  /* subtle fill        */
-  --bg-neutral-t1-4-hover:   #e8ebef;
-  --bg-primary-t1-1-default: #00b5ad;
-  --bg-primary-t1-1-hover:   #00a19a;
-  --bg-primary-t1-1-active:  #008b85;
-  --bg-primary-t3-1-default: #e2f6f5;  /* primary tint       */
-  --bg-success-t1-1-default: #12a150;
-  --bg-success-t3-1-default: #e5f5ec;
-  --bg-error-t1-1-default:   #e5484d;
-  --bg-error-t3-1-default:   #fdeced;
-  --bg-warning-t1-1-default: #eda01c;
-  --bg-warning-t3-1-default: #fdf3e0;
-  --bg-info-t1-1-default:    #0d99d6;
-  --bg-info-t3-1-default:    #e5f6fc;
-  --bg-fresh-green-t1-1-default: #0da06a;
-  --bg-fresh-green-t3-1-default: #e4f7f0;
-  --bg-violet-t3-1-default:  #efeafe;
-  --bg-orange-t3-1-default:  #fdeee3;
-  --bg-magenta-t3-1-default: #fceaf6;
+  /* app canvas — real dist :root --background (blue-gray-25) */
+  --background: #f5f7fa;
 
-  /* fg */
-  --fg-neutral-t1-1-default: #171b21;
-  --fg-neutral-t1-2-default: #4c545f;
-  --fg-neutral-t1-3-default: #7b8390;
-  --fg-neutral-t2-1-default: #ffffff;  /* on colored fills   */
-  --fg-primary-t1-1-default: #007d78;
-  --fg-success-t1-1-default: #0d7c3e;
-  --fg-error-t1-1-default:   #cd2f34;
-  --fg-warning-t1-1-default: #9c6708;
-  --fg-info-t1-1-default:    #0874a4;
-  --fg-fresh-green-t1-1-default: #0a7a4f;
-  --fg-violet-t1-1-default:  #6b46e5;
+  /* ===== bg · neutral ===== */
+  --bg-neutral-t1-1-default: #ffffff;   /* gray-0   card surface        */
+  --bg-neutral-t1-1-hover:   #f0f0f0;   /* gray-6                       */
+  --bg-neutral-t1-1-active:  #ebebeb;   /* gray-8                       */
+  --bg-neutral-t1-1-focus:   #f0f0f0;   /* gray-6                       */
+  --bg-neutral-t1-2-default: #fafafa;   /* gray-2                       */
+  --bg-neutral-t1-3-default: #f5f5f5;   /* gray-4                       */
+  --bg-neutral-t1-4-default: #f0f0f0;   /* gray-6   subtle fill         */
+  --bg-neutral-t1-4-hover:   #e6e6e6;   /* gray-10                      */
+  --bg-neutral-t1-4-active:  #cccccc;   /* gray-20                      */
+  --bg-neutral-t1-4-focus:   #e6e6e6;   /* gray-10                      */
+  --bg-neutral-t1-4-disabled:#f0f0f0;   /* gray-6                       */
+  --bg-neutral-t1-4-selected:#ffffff;   /* gray-0                       */
+  --bg-neutral-t3-0-default: #4c4c4c;   /* gray-70  secondary btn fill  */
+  --bg-neutral-t3-0-hover:   #333333;   /* gray-80                      */
+  --bg-neutral-t3-0-active:  #191919;   /* gray-90                      */
+  --bg-neutral-t3-0-focus:   #333333;   /* gray-80                      */
+  --bg-neutral-t3-0-disabled:#cccccc;   /* gray-20                      */
+  --bg-neutral-t3-1-default: #4c4c4c;   /* gray-70  (bg6)               */
+  --bg-neutral-t3-1-hover:   #333333;
+  --bg-neutral-t3-1-active:  #191919;
+  --bg-neutral-t3-1-focus:   #333333;
+  --bg-neutral-t3-2-default: #262626;   /* gray-85  (bg7)               */
+
+  /* ===== bg · primary (cyan) ===== */
+  --bg-primary-t1-1-default: #ffffff;   /* gray-0  (dt-primary-bg3)     */
+  --bg-primary-t1-1-hover:   #e0f7f7;   /* cyan-6                       */
+  --bg-primary-t1-1-active:  #d6f4f4;   /* cyan-10                      */
+  --bg-primary-t1-1-focus:   #e0f7f7;   /* cyan-6                       */
+  --bg-primary-t1-1-disabled:#ffffff;   /* gray-0                       */
+  --bg-primary-t1-1-selected:#e0f7f7;   /* cyan-6                       */
+  --bg-primary-t2-1-default: #e0f7f7;   /* cyan-6   tint                */
+  --bg-primary-t2-1-hover:   #d6f4f4;   /* cyan-8                       */
+  --bg-primary-t2-1-active:  #ccf1f1;   /* cyan-10                      */
+  --bg-primary-t2-1-focus:   #d6f4f4;   /* cyan-8                       */
+  --bg-primary-t3-1-default: #009595;   /* cyan-60  SOLID primary       */
+  --bg-primary-t3-1-hover:   #007070;   /* cyan-70                      */
+  --bg-primary-t3-1-active:  #004a4a;   /* cyan-80                      */
+  --bg-primary-t3-1-focus:   #007070;   /* cyan-70                      */
+  --bg-primary-t3-1-disabled:#99e3e3;   /* cyan-20                      */
+
+  /* ===== bg · success (green) ===== */
+  --bg-success-t1-1-default: #ffffff;   /* gray-0  (dt-success-bg3)     */
+  --bg-success-t1-1-hover:   #d1f0db;   /* green-10                     */
+  --bg-success-t1-1-focus:   #d1f0db;
+  --bg-success-t2-1-default: #e3f6e9;   /* green-6  tint                */
+  --bg-success-t2-1-hover:   #daf3e2;   /* green-8                      */
+  --bg-success-t2-1-active:  #d1f0db;   /* green-10                     */
+  --bg-success-t2-1-focus:   #daf3e2;
+  --bg-success-t3-1-default: #45c16e;   /* green-40 SOLID               */
+  --bg-success-t3-1-hover:   #17b24a;   /* green-50                     */
+  --bg-success-t3-1-active:  #128e3b;   /* green-60                     */
+  --bg-success-t3-1-focus:   #17b24a;
+  --bg-success-t3-1-disabled:#a2e0b7;   /* green-20                     */
+
+  /* ===== bg · error (red) ===== */
+  --bg-error-t1-1-default:   #ffffff;   /* gray-0  (dt-error-bg3)       */
+  --bg-error-t1-1-hover:     #fae4e4;   /* red-6                        */
+  --bg-error-t1-1-focus:     #fae4e4;
+  --bg-error-t2-1-default:   #fae4e4;   /* red-6    tint                */
+  --bg-error-t2-1-hover:     #f9dbdb;   /* red-8                        */
+  --bg-error-t2-1-active:    #f7d2d2;   /* red-10                       */
+  --bg-error-t2-1-focus:     #f9dbdb;
+  --bg-error-t3-1-default:   #d61e20;   /* red-50   SOLID               */
+  --bg-error-t3-1-hover:     #c11b1d;   /* red-55                       */
+  --bg-error-t3-1-active:    #ab181a;   /* red-60                       */
+  --bg-error-t3-1-focus:     #c11b1d;
+  --bg-error-t3-1-disabled:  #efa5a6;   /* red-20                       */
+
+  /* ===== bg · warning (yellow) =====
+     NOTE: the real color.scss defines warning t1-1 twice; the
+     bg1 (solid) mapping comes last and wins, so t1-1 = SOLID. */
+  --bg-warning-t1-1-default: #fdc935;   /* yellow-40 SOLID              */
+  --bg-warning-t1-1-hover:   #fdbc02;   /* yellow-50                    */
+  --bg-warning-t1-1-active:  #ca9602;   /* yellow-60                    */
+  --bg-warning-t1-1-focus:   #fdbc02;
+  --bg-warning-t1-1-disabled:#fee49a;   /* yellow-20                    */
+  --bg-warning-t2-1-default: #fff7e0;   /* yellow-6 tint                */
+  --bg-warning-t2-1-hover:   #fff5d6;   /* yellow-8                     */
+  --bg-warning-t2-1-active:  #fff2cc;   /* yellow-10                    */
+  --bg-warning-t2-1-focus:   #fff5d6;
+  --bg-warning-t3-1-default: #fdc935;   /* yellow-40 SOLID (= t1-1)     */
+  --bg-warning-t3-1-hover:   #fdbc02;
+  --bg-warning-t3-1-active:  #ca9602;
+  --bg-warning-t3-1-disabled:#fee49a;
+
+  /* ===== bg · info (blue) ===== */
+  --bg-info-t1-1-default:    #ffffff;   /* gray-0  (dt-info-bg3)        */
+  --bg-info-t1-1-hover:      #e0f2fb;   /* blue-6                       */
+  --bg-info-t1-1-focus:      #e0f2fb;
+  --bg-info-t2-1-default:    #e0f2fb;   /* blue-6   tint                */
+  --bg-info-t2-1-hover:      #d6edfa;   /* blue-8                       */
+  --bg-info-t2-1-active:     #cce9f9;   /* blue-10                      */
+  --bg-info-t2-1-focus:      #d6edfa;
+  --bg-info-t3-1-default:    #34a5e7;   /* blue-40  SOLID               */
+  --bg-info-t3-1-hover:      #1a9ae4;   /* blue-45                      */
+  --bg-info-t3-1-active:     #018fe1;   /* blue-50                      */
+  --bg-info-t3-1-focus:      #1a9ae4;
+  --bg-info-t3-1-disabled:   #99d2f3;   /* blue-20                      */
+
+  /* ===== bg · status accents (t3-1 = solid, only tier mapped) ===== */
+  --bg-fresh-green-t1-1-default: #c5dd4e;  /* olive-40  */
+  --bg-fresh-green-t3-1-default: #c5dd4e;
+  --bg-violet-t3-1-default:  #6c5599;      /* violet-40 */
+  --bg-orange-t3-1-default:  #ff7533;      /* orange-40 */
+  --bg-magenta-t3-1-default: #ff3389;      /* magenta-40 */
+
+  /* ===== fg · neutral ===== */
+  --fg-neutral-t1-0-default:  #262626;  /* gray-85 dark-on-yellow       */
+  --fg-neutral-t1-0-disabled: #cccccc;
+  --fg-neutral-t1-1-default:  #333333;  /* gray-80 primary text         */
+  --fg-neutral-t1-1-hover:    #191919;  /* gray-90                      */
+  --fg-neutral-t1-1-focus:    #191919;
+  --fg-neutral-t1-1-active:   #000000;  /* gray-100                     */
+  --fg-neutral-t1-1-disabled: #cccccc;  /* gray-20                      */
+  --fg-neutral-t1-2-default:  #4c4c4c;  /* gray-70 secondary text       */
+  --fg-neutral-t1-2-hover:    #333333;  /* gray-80                      */
+  --fg-neutral-t1-2-focus:    #333333;
+  --fg-neutral-t1-2-active:   #191919;  /* gray-90                      */
+  --fg-neutral-t1-2-disabled: #cccccc;
+  --fg-neutral-t1-2-selected: #009595;  /* cyan-60                      */
+  --fg-neutral-t1-3-default:  #7f7f7f;  /* gray-50 muted text           */
+  --fg-neutral-t1-3-hover:    #666666;  /* gray-60                      */
+  --fg-neutral-t1-3-focus:    #666666;
+  --fg-neutral-t1-3-active:   #4c4c4c;  /* gray-70                      */
+  --fg-neutral-t1-3-disabled: #cccccc;
+  --fg-neutral-t1-3-selected: #009595;  /* cyan-60 (flat tab selected)  */
+  --fg-neutral-t2-1-default:  #333333;  /* (= fg1) ArInput affix color  */
+  --fg-neutral-t3-0-default:  #ffffff;  /* WHITE on colored fills       */
+  --fg-neutral-t3-0-disabled: #ffffff;
+
+  /* ===== fg · primary / status ===== */
+  --fg-primary-t1-1-default: #009595;   /* cyan-60                      */
+  --fg-primary-t1-1-hover:   #007070;   /* cyan-70                      */
+  --fg-primary-t1-1-active:  #004a4a;   /* cyan-80                      */
+  --fg-primary-t1-1-disabled:#99e3e3;   /* cyan-20                      */
+  --fg-primary-t2-1-default: #009595;   /* (= fg1)                      */
+  --fg-success-t1-1-default: #17b24a;   /* green-50                     */
+  --fg-success-t2-2-default: #17b24a;   /* (= fg1) badge success text   */
+  --fg-error-t1-1-default:   #d61e20;   /* red-50                       */
+  --fg-error-t2-1-default:   #d61e20;
+  --fg-warning-t1-1-default: #ca9602;   /* yellow-60                    */
+  --fg-warning-t2-1-default: #ca9602;
+  --fg-info-t1-1-default:    #018fe1;   /* blue-50                      */
+  --fg-info-t2-1-default:    #018fe1;
+  /* status accents: no fg in the real map — use the solid bg value */
+  --fg-fresh-green-t1-1-default: #0e6b2c;  /* olive-70 */
+  --fg-violet-t1-1-default:  #6c5599;
   --fg-orange-t1-1-default:  #d3560e;
-  --fg-magenta-t1-1-default: #b63487;
+  --fg-magenta-t1-1-default: #e60061;
 
-  /* st (strokes) */
-  --st-neutral-t1-1-default: #e6e8ec;  /* hairlines          */
-  --st-neutral-t1-2-default: #d3d7de;  /* control borders    */
-  --st-neutral-t1-5-default: #97a0ac;
-  --st-primary-t1-1-default: #00b5ad;
+  /* ===== st · neutral (t1-1 darkest → t1-5 lightest) ===== */
+  --st-neutral-focus:        #34a5e7;   /* dt-info-st1-default blue-40  */
+  --st-neutral-t1-1-default: #4c4c4c;   /* gray-70                      */
+  --st-neutral-t1-2-default: #7f7f7f;   /* gray-50 checkbox/radio border*/
+  --st-neutral-t1-2-hover:   #666666;   /* gray-60                      */
+  --st-neutral-t1-2-focus:   #666666;
+  --st-neutral-t1-2-active:  #4c4c4c;   /* gray-70                      */
+  --st-neutral-t1-2-disabled:#cccccc;   /* gray-20                      */
+  --st-neutral-t1-4-default: #cccccc;   /* gray-20 input border, row sep*/
+  --st-neutral-t1-4-hover:   #b3b3b3;   /* gray-30                      */
+  --st-neutral-t1-4-focus:   #b3b3b3;
+  --st-neutral-t1-4-active:  #999999;   /* gray-40                      */
+  --st-neutral-t1-4-disabled:#cccccc;
+  --st-neutral-t1-5-default: #e6e6e6;   /* gray-10 hairline, tab filler */
+  --st-neutral-t1-5-hover:   #cccccc;   /* gray-20                      */
+  --st-neutral-t1-5-focus:   #cccccc;
+  --st-neutral-t1-5-active:  #b3b3b3;   /* gray-30                      */
+  --st-neutral-t1-5-disabled:#e6e6e6;   /* gray-10                      */
+  --st-neutral-t1-5-selected:#009595;   /* cyan-60                      */
+  --st-neutral-t3-3-default: #cccccc;   /* gray-20 tag/pagination border*/
+  --st-neutral-t3-3-hover:   #b3b3b3;
+  --st-neutral-t3-3-active:  #999999;
+  --st-neutral-t3-3-disabled:#cccccc;
+  --st-neutral-t3-4-default: #e6e6e6;   /* gray-10 card border          */
+  --st-neutral-t3-4-selected:#009595;   /* cyan-60 card selected border */
 
-  /* radius */
-  --radius-sm: 4px;  --radius-md: 8px;  --radius-lg: 12px;  --radius-circular: 9999px;
+  /* ===== st · primary / status ===== */
+  --st-primary-t1-1-default: #009595;   /* cyan-60                      */
+  --st-primary-t1-1-hover:   #007070;
+  --st-primary-t1-1-active:  #004a4a;
+  --st-primary-t1-1-disabled:#99e3e3;
+  --st-primary-t1-2-default: #e0f7f7;   /* cyan-6 ring tint             */
+  --st-primary-t1-2-hover:   #d6f4f4;   /* cyan-8                       */
+  --st-primary-t1-2-active:  #ccf1f1;   /* cyan-10                      */
+  --st-error-t1-1-default:   #d61e20;   /* red-50                       */
+  --st-error-t1-1-hover:     #ab181a;   /* red-60                       */
+  --st-error-t1-1-focus:     #ab181a;
+  --st-error-t1-1-active:    #951516;   /* red-70                       */
+  --st-error-t1-1-disabled:  #efa5a6;   /* red-20                       */
+  --st-error-t1-2-default:   #f9dbdb;   /* red-8                        */
+  --st-success-t1-1-default: #45c16e;   /* green-40                     */
+  --st-success-t1-2-default: #e3f6e9;   /* green-6                      */
+  --st-warning-t1-1-default: #ca9602;   /* yellow-60                    */
+  --st-warning-t1-2-default: #fff7e0;   /* yellow-6                     */
+  --st-info-t1-1-default:    #34a5e7;   /* blue-40                      */
+  --st-info-t1-2-default:    #e0f2fb;   /* blue-6                       */
 
-  /* spacing */
+  /* ===== legacy accent aliases (pre-uikit prototype names) ===== */
+  /* kept so old rules keep resolving; values follow the real palette */
+  --fg-error-t1-1-disabled: #efa5a6;
+
+  /* ===== radius (real scale: xs 4 · sm 8 · md 12 · lg 16) ===== */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xlg: 24px;
+  --radius-circular: 9999px;
+
+  /* ===== spacing (real: --space-N, 4px steps + 0.5 = 2px) ===== */
+  --space-0: 0;
+  --space-0-5: 2px;
   --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
-  --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-7: 28px;
+  --space-8: 32px; --space-10: 40px; --space-12: 48px;
+  --space-16: 64px; --space-20: 80px; --space-24: 96px;
 
-  /* shadows */
+  /* ===== control heights ===== */
+  --control-height-sm: 32px;
+  --control-height-md: 40px;
+  --control-height-lg: 48px;
+
+  /* ===== shadows ===== */
   --shadow-xs: 0 1px 2px rgba(16,24,40,.06);
   --shadow-sm: 0 4px 8px -2px rgba(16,24,40,.08);
   --shadow-md: 0 12px 16px -4px rgba(16,24,40,.10);
 
-  /* typography */
+  /* ===== typography ===== */
   --font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
 }

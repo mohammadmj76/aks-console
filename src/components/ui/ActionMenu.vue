@@ -96,7 +96,7 @@ onBeforeUnmount(() => {
   position: fixed; z-index: 70;
   min-width: 190px; padding: var(--space-1);
   background: var(--bg-neutral-t1-1-default);
-  border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md);
+  border: 1px solid var(--st-neutral-t1-5-default); border-radius: var(--radius-md);
   box-shadow: 0 12px 32px -8px rgba(16,24,40,.18), 0 4px 8px -2px rgba(16,24,40,.08);
   animation: menuIn .14s cubic-bezier(.2,.7,.2,1);
 }
@@ -110,5 +110,5 @@ onBeforeUnmount(() => {
 .menu button:hover:not(:disabled) { background: var(--bg-neutral-t1-4-default); }
 .menu button.danger { color: var(--fg-error-t1-1-default); }
 .menu button:disabled { opacity: .45; cursor: not-allowed; }
-.menu hr { border: 0; border-top: 1px solid var(--st-neutral-t1-1-default); margin: var(--space-1) 0; }
+.menu hr { border: 0; border-top: 1px solid var(--st-neutral-t1-5-default); margin: var(--space-1) 0; }
 </style>

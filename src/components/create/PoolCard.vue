@@ -1,11 +1,22 @@
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import {
   REGION, FLAVOR_CATALOG, FLAVOR_CATEGORIES, fmtIRR,
 } from '../../data'
 import ArCheckbox from '../ui/ArCheckbox.vue'
-import ArSelectMenu from '../ui/ArSelectMenu.vue'
+import ArSelect from '../ui/ArSelect.vue'
 import ArRadioDot from '../ui/ArRadioDot.vue'
+import ArInput from '../ui/ArInput.vue'
+import ArField from '../ui/ArField.vue'
+import ArTag from '../ui/ArTag.vue'
+import ArBadge from '../ui/ArBadge.vue'
+import ArLinkButton from '../ui/ArLinkButton.vue'
+import ArTable from '../ui/ArTable.vue'
+import ArTableRow from '../ui/ArTableRow.vue'
+import ArTableCell from '../ui/ArTableCell.vue'
+import ArPagination from '../ui/ArPagination.vue'
+import ArTab from '../ui/ArTab.vue'
+import ArIcon from '../ui/ArIcon.vue'
 
 /*
  * One node pool inside the stepper's accordion list.
@@ -101,13 +112,26 @@ const totalPages = computed(() => Math.max(1, Math.ceil(filteredFlavors.value.le
 const pagedFlavors = computed(() =>
   filteredFlavors.value.slice((page.value - 1) * perPage.value, page.value * perPage.value)
 )
-const pageNumbers = computed(() => Array.from({ length: totalPages.value }, (_, i) => i + 1))
+
+/* reset to the first page whenever the filters change the result set */
+watch([fCat, fVcpu, fMem, fAz], () => { page.value = 1 })
 
 const zoneName = (id) => REGION.zones.find((z) => z.id === id)?.name || id
 const azCell = (f) =>
   flavorZones(f).map((z) => (z.soldOut ? `${zoneName(z.id)} (Sold out)` : zoneName(z.id))).join(' | ')
 const availableZones = (f) => flavorZones(f).filter((z) => !z.soldOut).map((z) => z.id)
 const allZonesSoldOut = (f) => !availableZones(f).length
+
+const FLAVOR_COLUMNS = [
+  { label: '', name: 'pick' },
+  { label: 'Flavor', name: 'flavor' },
+  { label: 'AZ', name: 'az' },
+  { label: 'vCPUs', name: 'vcpu' },
+  { label: 'Memory', name: 'ram' },
+  { label: 'Disk', name: 'disk' },
+  { label: 'Port Speed', name: 'bandwidth' },
+  { label: 'Pricing', name: 'pricing' },
+]
 
 /* single flavor per pool — picking another replaces the current one */
 function toggleFlavor(f) {
@@ -125,6 +149,9 @@ function specToggleZone(zoneId, f) {
   const i = zones.indexOf(zoneId)
   i >= 0 ? zones.splice(i, 1) : zones.push(zoneId)
 }
+const selectedFlavor = computed(() =>
+  props.pool.specs.length ? FLAVOR_CATALOG.find((f) => f.id === props.pool.specs[0].flavorId) : null
+)
 
 /* ---------------- advanced settings ---------------- */
 const advOpen = ref(false)
@@ -133,14 +160,18 @@ const IMAGES = [
   { id: 'debian-12', name: 'Debian 12' },
 ]
 
+/* tooltip contents (v-tippy on info icons), matching the team convention */
+const TIPPY_TOP = { placement: 'top', arrow: true }
+const TIPS = {
+  os: 'The operating system installed on every node of this pool. It cannot be changed after the pool is created.',
+  labels: 'Key=value pairs added to every node of this pool. Workloads can use them to schedule pods on specific nodes.',
+  taints: 'Keeps regular pods off this pool. A pod runs here only if it declares a matching toleration. Effect controls how strict the repel is: NoSchedule blocks new pods, PreferNoSchedule tries to avoid them, NoExecute evicts pods already running.',
+}
+
 const K8S_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?(\/[a-z0-9]([a-z0-9-.]*[a-z0-9])?)?$/
 const K8S_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
 const nodeLabelInput = ref('')
 const nodeLabelError = ref('')
-const nodeLabelOk = computed(() => props.pool.labels.every((l) => {
-  const [k, v] = l.split('=')
-  return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
-}))
 /* live check on the text being typed, so a bad label is visible before Enter */
 const nodeLabelPendingOk = computed(() => {
   const v = nodeLabelInput.value.trim().replace(/\s+/g, '')
@@ -211,19 +242,34 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       @click="emit('toggle')"
       @keydown.enter.prevent="emit('toggle')"
     >
-      <svg class="pool-chev" :class="{ flip: open }" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 6.5 4 4 4-4"/></svg>
+      <ArIcon
+        name="chevron-down"
+        size="sm"
+        class="pool-chev"
+        :class="{ flip: open }"
+      />
       <div class="pool-titles">
         <span class="pool-name text-body-1-strong">{{ displayName }}</span>
-        <span v-if="!open" class="pool-sub text-caption-1" :class="{ 'err-sub': !ok }">
-          {{ !ok ? `Missing: ${missingShort}` : summary }}
-        </span>
+        <span
+          v-if="!open"
+          class="pool-sub text-caption-1"
+          :class="{ 'err-sub': !ok }"
+        >{{ !ok ? `Missing: ${missingShort}` : summary }}</span>
       </div>
-      <span v-if="!open && !ok" class="pool-badge" :title="`Missing: ${missingShort}`">
-        <span class="dot"></span> Incomplete
-      </span>
-      <span v-else-if="!open && ok" class="pool-badge ok">
-        <span class="dot"></span> Complete
-      </span>
+      <ArBadge
+        v-if="!open && !ok"
+        variant="danger"
+        size="sm"
+        pill
+        text="Incomplete"
+      />
+      <ArBadge
+        v-else-if="!open && ok"
+        variant="success"
+        size="sm"
+        pill
+        text="Complete"
+      />
       <button
         class="pool-del"
         :class="{ confirm: confirmDelete }"
@@ -231,22 +277,34 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         @click.stop="onDelete"
       >
         <template v-if="confirmDelete">Confirm delete?</template>
-        <svg v-else width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M2.5 4h11M6.5 4V2.8c0-.4.3-.8.8-.8h1.4c.5 0 .8.4.8.8V4M4 4l.6 9c0 .6.5 1 1 1h4.8c.5 0 1-.4 1-1L12 4M6.5 7v4M9.5 7v4" />
-        </svg>
+        <ArIcon
+          v-else
+          name="trash"
+          size="sm"
+        />
       </button>
     </div>
 
     <!-- ======== body (expanded) ======== -->
-    <div v-show="open" class="pool-body">
-      <div style="display: flex; gap: var(--space-4); flex-wrap: wrap">
-        <div class="ar-field" style="flex: 1; min-width: 220px; max-width: 360px">
-          <label>Pool Name</label>
-          <div class="ar-input" :class="{ 'error-mode': pool.name && !nameOk }">
-            <input v-model="pool.name" placeholder="Enter a name" spellcheck="false" style="text-transform: lowercase" />
-          </div>
-          <span v-if="pool.name && !nameOk" class="error-text">Lowercase letters, digits and dashes. 3–40 characters.</span>
-        </div>
+    <div
+      v-show="open"
+      class="pool-body"
+    >
+      <div class="flex gap-4 flex-wrap">
+        <ArField
+          label="Pool Name"
+          class="pool-name-field"
+          :error="Boolean(pool.name) && !nameOk"
+          :message="pool.name && !nameOk ? 'Lowercase letters, digits and dashes. 3–40 characters.' : ''"
+        >
+          <ArInput
+            v-model="pool.name"
+            placeholder="Enter a name"
+            spellcheck="false"
+            ltr
+            style="text-transform: lowercase"
+          />
+        </ArField>
         <div class="ar-field" style="width: 170px">
           <label>Node Count<span class="req">*</span></label>
           <div class="count-ctl" :class="{ 'error-mode': pool.count === '' || pool.count < 1 || pool.count > 20 }">
@@ -262,7 +320,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       <div class="flavor-filter">
         <div class="ar-field" style="width: 130px">
           <label>vCPUs</label>
-          <ArSelectMenu
+          <ArSelect
             v-model="fVcpu"
             :options="[{ value: '', label: 'All' }, ...vcpuOptions.map((v) => ({ value: String(v), label: String(v) }))]"
             aria-label="vCPUs"
@@ -270,7 +328,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         </div>
         <div class="ar-field" style="width: 130px">
           <label>Memory</label>
-          <ArSelectMenu
+          <ArSelect
             v-model="fMem"
             :options="[{ value: '', label: 'All' }, ...memOptions.map((m) => ({ value: String(m), label: String(m) }))]"
             aria-label="Memory"
@@ -278,7 +336,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         </div>
         <div class="ar-field" style="width: 150px">
           <label>AZ</label>
-          <ArSelectMenu
+          <ArSelect
             v-model="fAz"
             :options="[{ value: '', label: 'All' }, ...poolZones.map((z) => ({ value: z, label: zoneName(z) }))]"
             aria-label="AZ"
@@ -286,130 +344,142 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         </div>
       </div>
 
-      <div class="pill-tabs">
-        <button
-          v-for="c in FLAVOR_CATEGORIES"
-          :key="c"
-          :class="{ on: fCat === c }"
-          @click="fCat = c"
-        >{{ c }}</button>
-      </div>
+      <ArTab
+        v-model="fCat"
+        flat
+        :items="FLAVOR_CATEGORIES"
+      />
 
       <!-- flavor table -->
-      <div class="table-scroll">
-        <table class="ar-table flavor-table">
-          <thead>
-            <tr>
-              <th style="width: 36px"></th>
-              <th>Flavor</th>
-              <th>AZ</th>
-              <th>vCPUs</th>
-              <th>Memory</th>
-              <th>Disk</th>
-              <th>Port Speed</th>
-              <th>Pricing</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="f in pagedFlavors"
-              :key="f.id"
-              class="selectable"
-              :class="{ selected: specSelected(f), 'sold-out': allZonesSoldOut(f) }"
-              @click="!allZonesSoldOut(f) && toggleFlavor(f)"
-            >
-              <td @click.stop>
-                <ArRadioDot
-                  :model-value="specSelected(f)"
-                  :disabled="allZonesSoldOut(f)"
-                  @update:model-value="toggleFlavor(f)"
-                />
-              </td>
-              <td class="mono cell-main">{{ f.id }}</td>
-              <td class="text-body-2" :class="{ muted: f.azs.some((z) => z.soldOut) }">{{ azCell(f) }}</td>
-              <td class="text-body-2">{{ f.vcpu }}</td>
-              <td class="text-body-2">{{ f.ram }} GiB</td>
-              <td class="text-body-2">25 GB</td>
-              <td class="text-body-2 muted">{{ f.bandwidth.split(' / ').pop() }}</td>
-              <td class="text-body-2-strong">{{ fmtIRR(Math.round(f.pricePerHour * 730)) }} IRR/month</td>
-            </tr>
-            <tr v-if="!pagedFlavors.length">
-              <td colspan="7" class="text-body-2 muted" style="text-align: center; padding: var(--space-6)">No flavors match the current filters.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <ArTable
+        :columns="FLAVOR_COLUMNS"
+        :items="pagedFlavors"
+        key-field="id"
+        class="flavor-table"
+      >
+        <template #row="f">
+          <ArTableRow
+            :key="f.id"
+            class="flavor-row"
+            :class="{ selected: specSelected(f), 'sold-out': allZonesSoldOut(f) }"
+            @click="!allZonesSoldOut(f) && toggleFlavor(f)"
+          >
+            <ArTableCell @click.stop>
+              <ArRadioDot
+                :model-value="specSelected(f)"
+                :disabled="allZonesSoldOut(f)"
+                @update:model-value="toggleFlavor(f)"
+              />
+            </ArTableCell>
+            <ArTableCell class="mono cell-main">{{ f.id }}</ArTableCell>
+            <ArTableCell :class="{ muted: f.azs.some((z) => z.soldOut) }">{{ azCell(f) }}</ArTableCell>
+            <ArTableCell>{{ f.vcpu }}</ArTableCell>
+            <ArTableCell>{{ f.ram }} GiB</ArTableCell>
+            <ArTableCell>25 GB</ArTableCell>
+            <ArTableCell class="muted">{{ f.bandwidth.split(' / ').pop() }}</ArTableCell>
+            <ArTableCell class="text-body-2-strong">{{ fmtIRR(Math.round(f.pricePerHour * 730)) }} IRR/month</ArTableCell>
+          </ArTableRow>
+        </template>
+        <template #noContent>
+          <span class="text-body-2 muted">No flavors match the current filters.</span>
+        </template>
+      </ArTable>
 
-      <div style="display: flex; justify-content: space-between; align-items: center">
+      <div class="flex space-between align-items-center">
         <span class="text-caption-1 muted">
           Showing {{ filteredFlavors.length ? (page - 1) * perPage + 1 : 0 }}–{{ Math.min(page * perPage, filteredFlavors.length) }} of {{ filteredFlavors.length }}
         </span>
-        <nav class="ar-pagination" aria-label="Flavor pagination">
-          <button class="ar-page" :disabled="page <= 1" @click="page--">‹</button>
-          <button
-            v-for="n in pageNumbers"
-            :key="n"
-            class="ar-page"
-            :class="{ current: n === page }"
-            @click="page = n"
-          >{{ n }}</button>
-          <button class="ar-page" :disabled="page >= totalPages" @click="page++">›</button>
-        </nav>
+        <ArPagination
+          :current="page"
+          :total="totalPages"
+          @page-change="page = $event"
+        />
       </div>
 
-      <!-- selected specification (single) -->
-      <div v-if="pool.specs.length" class="spec-box">
-        <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Selected Specification</h4>
-        <div class="table-scroll">
-          <table class="ar-table">
-            <thead>
-              <tr><th>Specifications</th><th>Pricing</th><th style="width: 40%">AZ</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="text-body-2-strong">
-                  {{ FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId)?.category }} /
-                  <span class="mono">{{ pool.specs[0].flavorId }}</span> ·
-                  {{ FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId)?.vcpu }} vCPUs /
-                  {{ FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId)?.ram }} GiB
-                </td>
-                <td class="text-body-2">{{ fmtIRR(Math.round(FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId)?.pricePerHour * 730 || 0)) }} IRR/month</td>
-                <td>
-                  <div class="chip-row">
-                    <label
-                      v-for="z in flavorZones(FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId))"
-                      :key="z.id"
-                      class="check-line"
-                      :style="z.soldOut ? 'opacity:.5' : ''"
-                    >
-                      <ArCheckbox
-                        :model-value="pool.specs[0].zones.includes(z.id)"
-                        :disabled="z.soldOut"
-                        @update:model-value="specToggleZone(z.id, FLAVOR_CATALOG.find((f) => f.id === pool.specs[0].flavorId))"
-                      />
-                      {{ z.soldOut ? `${zoneName(z.id)} (Sold out)` : zoneName(z.id) }}
-                    </label>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <span v-if="!pool.specs[0].zones.length" class="error-text">
+      <!-- selected specification (single) — Multi AZ only: in Single AZ the
+           pool follows the master's AZ, so the AZ checkbox row is redundant -->
+      <div
+        v-if="pool.specs.length && !allowedZones.length"
+        class="spec-box"
+      >
+        <h4 class="text-body-1 spec-title">Selected Specification</h4>
+        <ArTable
+          :columns="[
+            { label: 'Specifications', name: 'spec' },
+            { label: 'Pricing', name: 'price' },
+            { label: 'AZ', name: 'az' },
+          ]"
+          :items="[{ id: 'spec' }]"
+          key-field="id"
+        >
+          <template #row>
+            <ArTableRow>
+              <ArTableCell class="text-body-2-strong">
+                {{ selectedFlavor?.category }} /
+                <span class="mono">{{ pool.specs[0].flavorId }}</span> ·
+                {{ selectedFlavor?.vcpu }} vCPUs /
+                {{ selectedFlavor?.ram }} GiB
+              </ArTableCell>
+              <ArTableCell>{{ fmtIRR(Math.round(selectedFlavor?.pricePerHour * 730 || 0)) }} IRR/month</ArTableCell>
+              <ArTableCell>
+                <div class="chip-row">
+                  <label
+                    v-for="z in flavorZones(selectedFlavor)"
+                    :key="z.id"
+                    class="check-line text-body-2"
+                    :style="z.soldOut ? 'opacity:.5' : ''"
+                  >
+                    <ArCheckbox
+                      :model-value="pool.specs[0].zones.includes(z.id)"
+                      :disabled="z.soldOut"
+                      @update:model-value="specToggleZone(z.id, selectedFlavor)"
+                    />
+                    {{ z.soldOut ? `${zoneName(z.id)} (Sold out)` : zoneName(z.id) }}
+                  </label>
+                </div>
+              </ArTableCell>
+            </ArTableRow>
+          </template>
+        </ArTable>
+        <span
+          v-if="!pool.specs[0].zones.length"
+          class="spec-err text-caption-1-strong"
+        >
           Select at least one availability zone for this flavor.
         </span>
       </div>
 
       <!-- advanced settings (optional) -->
-      <button class="adv-toggle" @click="advOpen = !advOpen">
+      <button
+        class="adv-toggle"
+        @click="advOpen = !advOpen"
+      >
         Advanced Settings (Optional)
-        <svg class="chev" :style="{ transform: advOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 6.5 4 4 4-4"/></svg>
+        <ArIcon
+          name="chevron-down"
+          size="sm"
+          class="chev"
+          :style="{ transform: advOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }"
+        />
       </button>
 
-      <div v-if="advOpen" style="border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5)">
+      <div
+        v-if="advOpen"
+        class="adv-box"
+      >
         <!-- OS -->
         <div class="dist-row" style="align-items: flex-start">
-          <span class="dist-k" style="margin-top: 6px">OS</span>
+          <span class="dist-k" style="margin-top: 6px">
+            <span class="k-tip">
+              OS
+              <ArIcon
+                name="info"
+                size="xs"
+                v-tippy="{ ...TIPPY_TOP, content: TIPS.os }"
+                class="info-icon"
+              />
+            </span>
+          </span>
           <div style="display: flex; flex-direction: column; gap: var(--space-3)">
             <div class="chip-row">
               <button
@@ -431,15 +501,27 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 
         <!-- Node labels -->
         <div class="dist-row" style="align-items: flex-start">
-          <span class="dist-k" style="margin-top: 6px">Node Labels</span>
-          <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-2); max-width: 560px">
+          <span class="dist-k" style="margin-top: 6px">
+            <span class="k-tip">
+              Node Labels
+              <ArIcon
+                name="info"
+                size="xs"
+                v-tippy="{ ...TIPPY_TOP, content: TIPS.labels }"
+                class="info-icon"
+              />
+            </span>
+          </span>
+          <div class="adv-col">
             <div class="tagbox">
-              <span v-for="l in pool.labels" :key="l" class="ar-tag mono">
+              <ArTag
+                v-for="l in pool.labels"
+                :key="l"
+                class="mono"
+                @click="removeNodeLabel(l)"
+              >
                 {{ l }}
-                <button class="tag-x" aria-label="Remove label" @click="removeNodeLabel(l)">
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
-                </button>
-              </span>
+              </ArTag>
               <input
                 v-model="nodeLabelInput"
                 placeholder="key=value"
@@ -448,39 +530,87 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
                 @keydown="onNodeLabelKeydown"
               />
             </div>
-            <span v-if="nodeLabelError" class="error-text">{{ nodeLabelError }}</span>
-            <span v-else-if="nodeLabelInput && !nodeLabelPendingOk" class="error-text">Use the key=value format: lowercase keys with letters, digits, - and . Values up to 63 characters.</span>
-            <span v-else class="hint">Applied as Kubernetes labels to every node of this pool. Press Enter after each label. Up to 20.</span>
+            <span
+              v-if="nodeLabelError"
+              class="field-msg text-caption-1-strong"
+            >{{ nodeLabelError }}</span>
+            <span
+              v-else-if="nodeLabelInput && !nodeLabelPendingOk"
+              class="field-msg text-caption-1-strong"
+            >Use the key=value format: lowercase keys with letters, digits, - and . Values up to 63 characters.</span>
+            <span
+              v-else
+              class="field-msg text-caption-1 muted"
+            >Applied as Kubernetes labels to every node of this pool. Press Enter after each label. Up to 20.</span>
           </div>
         </div>
 
         <!-- Taints -->
         <div class="dist-row" style="align-items: flex-start">
-          <span class="dist-k" style="margin-top: 6px">Taints</span>
-          <div style="flex: 1; display: flex; flex-direction: column; gap: var(--space-3); max-width: 560px">
-            <div v-for="(t, i) in pool.taints" :key="i" class="dist-row" style="flex-wrap: nowrap; gap: var(--space-2)">
-              <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.key && !K8S_KEY.test(t.key) }">
-                <input v-model="t.key" placeholder="Key" spellcheck="false" style="text-transform: lowercase" />
-              </div>
-              <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.value && !K8S_VAL.test(t.value) }">
-                <input v-model="t.value" placeholder="Value" spellcheck="false" />
-              </div>
-              <ArSelectMenu
+          <span class="dist-k" style="margin-top: 6px">
+            <span class="k-tip">
+              Taints
+              <ArIcon
+                name="info"
+                size="xs"
+                v-tippy="{ ...TIPPY_TOP, content: TIPS.taints }"
+                class="info-icon"
+              />
+            </span>
+          </span>
+          <div class="adv-col gap-3">
+            <div
+              v-for="(t, i) in pool.taints"
+              :key="i"
+              class="dist-row taint-row"
+            >
+              <ArInput
+                v-model="t.key"
+                class="taint-key"
+                placeholder="Key"
+                spellcheck="false"
+                ltr
+                style="text-transform: lowercase"
+                :error="Boolean(t.key) && !K8S_KEY.test(t.key)"
+              />
+              <ArInput
+                v-model="t.value"
+                class="taint-key"
+                placeholder="Value"
+                spellcheck="false"
+                :error="Boolean(t.value) && !K8S_VAL.test(t.value)"
+              />
+              <ArSelect
                 class="taint-effect"
                 v-model="t.effect"
                 :options="['NoSchedule', 'PreferNoSchedule', 'NoExecute']"
                 aria-label="Taint effect"
               />
-              <button class="taint-x" aria-label="Remove taint" @click="removeTaint(t)">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+              <button
+                class="taint-x"
+                aria-label="Remove taint"
+                @click="removeTaint(t)"
+              >
+                <ArIcon
+                  name="cross"
+                  size="xs"
+                />
               </button>
             </div>
-            <button class="link-btn" @click="addTaint">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
+            <ArLinkButton
+              prepend-icon="plus"
+              @click="addTaint"
+            >
               Add taint
-            </button>
-            <span v-if="pool.taints.length && !taintsOk" class="error-text">Taint keys must be lowercase (letters, digits, -, .). Value is optional.</span>
-            <span v-else class="hint">Tainted nodes repel pods that do not tolerate the taint. Value is optional.</span>
+            </ArLinkButton>
+            <span
+              v-if="pool.taints.length && !taintsOk"
+              class="field-msg text-caption-1-strong"
+            >Taint keys must be lowercase (letters, digits, -, .). Value is optional.</span>
+            <span
+              v-else
+              class="field-msg text-caption-1 muted"
+            >Tainted nodes repel pods that do not tolerate the taint. Value is optional.</span>
           </div>
         </div>
       </div>
@@ -490,12 +620,12 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 
 <style scoped>
 .pool-card {
-  border: 1px solid var(--st-neutral-t1-1-default);
+  border: 1px solid var(--st-neutral-t1-5-default);
   border-radius: var(--radius-lg, var(--radius-md));
   background: var(--bg-neutral-t1-1-default);
   overflow: hidden;
 }
-.pool-card.invalid { border-color: var(--bg-error-t1-1-default); }
+.pool-card.invalid { border-color: var(--bg-error-t2-1-default); }
 .pool-head {
   display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
@@ -507,38 +637,30 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 .pool-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .pool-name { color: var(--fg-neutral-t1-1-default); }
 .pool-sub {
-  color: var(--fg-neutral-t1-3-default); font-size: 12px; line-height: 16px;
+  color: var(--fg-neutral-t1-3-default);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pool-sub.err-sub { color: var(--fg-error-t1-1-default); }
-.pool-badge {
-  display: inline-flex; align-items: center; gap: 6px; flex: none;
-  font-size: 12px; color: var(--fg-error-t1-1-default);
-  background: var(--bg-error-t3-1-default);
-  border-radius: var(--radius-circular); padding: 3px 10px;
-}
-.pool-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bg-error-t1-1-default); }
-.pool-badge.ok { color: var(--fg-success-t1-1-default); background: var(--bg-success-t3-1-default); }
-.pool-badge.ok .dot { background: var(--bg-success-t1-1-default); }
 .pool-del {
   flex: none; display: inline-flex; align-items: center; gap: 4px;
-  border: 0; background: none; cursor: pointer; font: inherit; font-size: 12.5px;
+  border: 0; background: none; cursor: pointer; font: inherit;
+  font-size: 12px; font-weight: 450; line-height: 16px; letter-spacing: -0.24px;
   color: var(--fg-neutral-t1-3-default);
-  padding: 6px; border-radius: var(--radius-md);
+  padding: 6px; border-radius: var(--radius-sm);
 }
-.pool-del:hover { color: var(--fg-error-t1-1-default); background: var(--bg-error-t3-1-default); }
-.pool-del.confirm { color: var(--fg-error-t1-1-default); background: var(--bg-error-t3-1-default); font-weight: 450; }
+.pool-del:hover { color: var(--fg-error-t1-1-default); background: var(--bg-error-t2-1-default); }
+.pool-del.confirm { color: var(--fg-error-t1-1-default); background: var(--bg-error-t2-1-default); font-weight: 450; }
 .pool-body {
   display: flex; flex-direction: column; gap: var(--space-5);
   padding: var(--space-2) var(--space-5) var(--space-6);
-  border-top: 1px solid var(--st-neutral-t1-1-default);
+  border-top: 1px solid var(--st-neutral-t1-5-default);
 }
 .count-ctl {
   display: inline-flex; align-items: center; width: fit-content;
-  border: 1px solid var(--st-neutral-t1-5-default); border-radius: var(--radius-md);
+  border: 1px solid var(--st-neutral-t1-5-default); border-radius: var(--radius-sm);
   background: var(--bg-neutral-t1-1-default); overflow: hidden;
 }
-.count-ctl.error-mode { border-color: var(--bg-error-t1-1-default); }
+.count-ctl.error-mode { border-color: var(--bg-error-t2-1-default); }
 .count-ctl button {
   width: 34px; height: 36px; border: 0; background: none; cursor: pointer;
   font-size: 16px; color: var(--fg-neutral-t1-2-default);
@@ -547,23 +669,43 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 .count-ctl button:disabled { opacity: .4; cursor: not-allowed; }
 .count-ctl input {
   width: 44px; height: 36px; text-align: center; border: 0; outline: 0;
-  background: transparent; font: inherit; font-size: 13.5px; color: var(--fg-neutral-t1-1-default);
+  background: transparent; font: inherit; font-size: 14px; line-height: 20px;
+  letter-spacing: -0.28px; color: var(--fg-neutral-t1-1-default);
 }
 .spec-box {
-  border: 1px solid var(--st-neutral-t1-1-default); border-radius: var(--radius-md);
+  border: 1px solid var(--st-neutral-t1-5-default); border-radius: var(--radius-md);
   padding: var(--space-4) var(--space-6) var(--space-6);
   display: flex; flex-direction: column; gap: var(--space-3);
 }
+.spec-title { margin: 0 0 var(--space-3); }
+.spec-err { color: var(--fg-error-t1-1-default); }
 .check-line {
   display: inline-flex; align-items: center; gap: var(--space-2);
-  font-size: 13px; color: var(--fg-neutral-t1-2-default); cursor: pointer;
+  color: var(--fg-neutral-t1-2-default); cursor: pointer;
 }
 .flavor-filter { display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end; }
-.flavor-filter .check-line { white-space: nowrap; }
-.link-danger {
-  border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 450;
-  color: var(--fg-primary-t1-1-default); padding: 0;
+.flavor-row { cursor: pointer; }
+.flavor-row:hover { background: var(--bg-neutral-t1-4-default); }
+.flavor-row.selected { background: var(--bg-primary-t2-1-default); }
+.flavor-row.sold-out { color: var(--fg-neutral-t1-3-default); }
+.flex { display: flex; }
+.flex-wrap { flex-wrap: wrap; }
+.gap-3 { gap: var(--space-3); }
+.gap-4 { gap: var(--space-4); }
+.space-between { justify-content: space-between; }
+.align-items-center { align-items: center; }
+.pool-name-field { flex: 1; min-width: 220px; max-width: 360px; }
+.adv-box {
+  border: 1px solid var(--st-neutral-t1-5-default); border-radius: var(--radius-md);
+  padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5);
 }
-.link-danger:hover { text-decoration: underline; }
-.flavor-table tbody tr.sold-out td { color: var(--fg-neutral-t1-3-default); }
+.adv-col { flex: 1; display: flex; flex-direction: column; gap: var(--space-2); max-width: 560px; }
+.adv-col.gap-3 { gap: var(--space-3); }
+.taint-row { flex-wrap: nowrap; gap: var(--space-2); }
+.taint-key { flex: 2; }
+.field-msg { line-height: 16px; }
+/* label + info tooltip (same pattern as the views' .info-icon) */
+.k-tip { display: inline-flex; align-items: center; gap: 4px; }
+.info-icon { color: var(--fg-neutral-t1-3-default); cursor: help; }
+.info-icon:hover { color: var(--fg-neutral-t1-2-default); }
 </style>

@@ -69,8 +69,8 @@ onBeforeUnmount(() => {
 .ar-modal {
   width: 100%;
   background: var(--bg-neutral-t1-1-default);
-  border: 1px solid var(--st-neutral-t1-1-default);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--st-neutral-t1-5-default);
+  border-radius: var(--radius-sm);
   box-shadow: 0 24px 64px -12px rgba(15, 19, 26, .3);
   max-height: calc(100vh - var(--space-8));
   display: flex; flex-direction: column;
@@ -82,7 +82,7 @@ onBeforeUnmount(() => {
 }
 .ar-modal-x {
   flex: none; border: 0; background: none; cursor: pointer;
-  padding: 6px; border-radius: var(--radius-md);
+  padding: 6px; border-radius: var(--radius-sm);
   color: var(--fg-neutral-t1-3-default); display: inline-flex;
 }
 .ar-modal-x:hover { color: var(--fg-neutral-t1-1-default); background: var(--bg-neutral-t1-4-default); }
@@ -95,7 +95,7 @@ onBeforeUnmount(() => {
   flex: none;
   display: flex; justify-content: flex-end; gap: var(--space-3);
   padding: var(--space-4) var(--space-6);
-  border-top: 1px solid var(--st-neutral-t1-1-default);
+  border-top: 1px solid var(--st-neutral-t1-5-default);
 }
 
 /* open/close transition */

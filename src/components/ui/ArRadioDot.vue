@@ -19,9 +19,9 @@ defineProps({ disabled: Boolean })
   display: flex; align-items: center; justify-content: center; transition: border-color .15s;
   pointer-events: none;
 }
-.ar-radio-dot input:checked + .ring { border-color: var(--bg-primary-t1-1-default); }
+.ar-radio-dot input:checked + .ring { border-color: var(--st-primary-t1-1-default); }
 .ar-radio-dot .dot {
-  width: 8px; height: 8px; border-radius: 9999px; background: var(--bg-primary-t1-1-default);
+  width: 8px; height: 8px; border-radius: 9999px; background: var(--bg-primary-t3-1-default);
   transform: scale(0); transition: transform .15s;
 }
 .ar-radio-dot input:checked + .ring .dot { transform: scale(1); }
