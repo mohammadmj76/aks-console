@@ -461,6 +461,30 @@ table.ar-table { width: 100%; border-collapse: collapse; }
 .per-page-menu .ArSelect__tags { height: 30px; padding-inline: 0 8px; }
 
 /* ---------- tag box (security groups / labels) ---------- */
+/* tag input row (the panel's TagInput pattern: input + separate "+" button,
+   hint below, tags under it) */
+.label-input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.label-input-row .ArInput {
+  flex: 1;
+}
+.label-input-row .ar-btn {
+  flex: none;
+}
+.field-hint {
+  display: block;
+  margin-top: 6px;
+}
+.label-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
 .tagbox {
   min-height: 38px; padding: 4px var(--space-2); cursor: pointer;
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1);

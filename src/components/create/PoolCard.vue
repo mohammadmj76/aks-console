@@ -4,9 +4,11 @@ import {
   REGION, FLAVOR_CATALOG, FLAVOR_CATEGORIES, fmtIRR,
 } from '../../data'
 import ArCheckbox from '../ui/ArCheckbox.vue'
+import ArButton from '../ui/ArButton.vue'
 import ArSelect from '../ui/ArSelect.vue'
 import ArRadioDot from '../ui/ArRadioDot.vue'
 import ArInput from '../ui/ArInput.vue'
+import ArRangeSliderInput from '../ui/ArRangeSliderInput.vue'
 import ArField from '../ui/ArField.vue'
 import ArTag from '../ui/ArTag.vue'
 import ArBadge from '../ui/ArBadge.vue'
@@ -152,6 +154,10 @@ function specToggleZone(zoneId, f) {
 const selectedFlavor = computed(() =>
   props.pool.specs.length ? FLAVOR_CATALOG.find((f) => f.id === props.pool.specs[0].flavorId) : null
 )
+
+/* root disk (GB) — same bounds as the panel's root volume control */
+const ROOT_DISK_MIN = 25
+const ROOT_DISK_MAX = 1000
 
 /* ---------------- advanced settings ---------------- */
 const advOpen = ref(false)
@@ -449,6 +455,18 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         </span>
       </div>
 
+      <!-- root disk — per-pool root volume size in GB; the stepper sits
+           beside the title (panel's Root Volume control, without the type select) -->
+      <div class="root-disk-box">
+        <h4 class="text-body-1 root-disk-title">Root Disk</h4>
+        <ArRangeSliderInput
+          v-model="pool.rootDisk"
+          :min="ROOT_DISK_MIN"
+          :max="ROOT_DISK_MAX"
+          class="root-disk-ctl"
+        />
+      </div>
+
       <!-- advanced settings (optional) -->
       <button
         class="adv-toggle"
@@ -513,22 +531,17 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
             </span>
           </span>
           <div class="adv-col">
-            <div class="tagbox">
-              <ArTag
-                v-for="l in pool.labels"
-                :key="l"
-                class="mono"
-                @click="removeNodeLabel(l)"
-              >
-                {{ l }}
-              </ArTag>
-              <input
+            <!-- panel's tag input pattern: input with a separate "+" button,
+                 hint below, then the added tags -->
+            <div class="label-input-row">
+              <ArInput
                 v-model="nodeLabelInput"
-                placeholder="key=value"
+                placeholder="Confirm labels with enter"
                 spellcheck="false"
                 @input="nodeLabelError = ''"
                 @keydown="onNodeLabelKeydown"
               />
+              <ArButton variant="secondary" icon="plus" aria-label="Add label" @click="addNodeLabel()" />
             </div>
             <span
               v-if="nodeLabelError"
@@ -541,7 +554,17 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
             <span
               v-else
               class="field-msg text-caption-1 muted"
-            >Applied as Kubernetes labels to every node of this pool. Press Enter after each label. Up to 20.</span>
+            >After typing each label, press the Enter key.</span>
+            <div v-if="pool.labels.length" class="label-tags">
+              <ArTag
+                v-for="l in pool.labels"
+                :key="l"
+                class="mono"
+                @click="removeNodeLabel(l)"
+              >
+                {{ l }}
+              </ArTag>
+            </div>
           </div>
         </div>
 
@@ -679,6 +702,13 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 }
 .spec-title { margin: 0 0 var(--space-3); }
 .spec-err { color: var(--fg-error-t1-1-default); }
+.root-disk-box {
+  border: 1px solid var(--st-neutral-t1-5-default); border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-6);
+  display: flex; align-items: center; gap: var(--space-4);
+}
+.root-disk-title { margin: 0; }
+.root-disk-ctl { width: 266px; }
 .check-line {
   display: inline-flex; align-items: center; gap: var(--space-2);
   color: var(--fg-neutral-t1-2-default); cursor: pointer;

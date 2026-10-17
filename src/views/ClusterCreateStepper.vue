@@ -85,6 +85,7 @@ function makePool(from) {
     count: 3,
     specs: [], // single choice: [{ flavorId, zones: [] }]
     image: from?.image || 'ubuntu-22.04',
+    rootDisk: from?.rootDisk || 25,
     labels: [],
     taints: [],
   }
@@ -176,7 +177,6 @@ const cidrsOk = computed(() => cidrError(draft.podCidrs[0], 28) === '' && cidrEr
    Validation follows the real VPC-create zod (vpc-mfe CreateVpc + utils):
    private range, prefix bounds, then network address (host bits zero) ---- */
 const CIDR_PREFIXES = Array.from({ length: 13 }, (_, i) => String(16 + i))
-const CIDR_HELPER = 'The CIDR range cannot be changed after the cluster is created.'
 function cidrError(r, maxPrefix) {
   const octets = [r.o1, r.o2, r.o3, r.o4].map(Number)
   if ([r.o1, r.o2, r.o3, r.o4].some((o) => o === '') || octets.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return 'The IP address is not valid.'
@@ -744,10 +744,10 @@ function create() {
                   </div>
                 </div>
 
-                <!-- Pod Network -->
+                <!-- Pod Subnet -->
                 <div class="net-block">
                   <div class="flex align-items-center net-title">
-                    <span class="text-body-1">Pod Network</span>
+                    <span class="text-body-1">Pod Subnet</span>
                     <ArIcon
                       name="info"
                       size="sm"
@@ -757,9 +757,7 @@ function create() {
                   </div>
                   <div class="flex flex-column gap-2">
                     <ArField
-                      label="IPv4 CIDR"
-                      required
-                      :message="podCidrError || CIDR_HELPER"
+                      :message="podCidrError"
                       :error="Boolean(podCidrError)"
                     >
                       <div class="cidr-octets">
@@ -828,10 +826,10 @@ function create() {
                   </div>
                 </div>
 
-                <!-- Service Network -->
+                <!-- Service Subnet -->
                 <div class="net-block">
                   <div class="flex align-items-center net-title">
-                    <span class="text-body-1">Service Network</span>
+                    <span class="text-body-1">Service Subnet</span>
                     <ArIcon
                       name="info"
                       size="sm"
@@ -841,9 +839,7 @@ function create() {
                   </div>
                   <div class="flex flex-column gap-2">
                     <ArField
-                      label="IPv4 CIDR"
-                      required
-                      :message="svcCidrError || CIDR_HELPER"
+                      :message="svcCidrError"
                       :error="Boolean(svcCidrError)"
                     >
                       <div class="cidr-octets">
