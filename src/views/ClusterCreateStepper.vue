@@ -1111,36 +1111,36 @@ function create() {
                 >
                   Read the instructions and select the check box for confirmation.
                 </p>
-              </ArSection>
 
-              <!-- step nav -->
-              <div class="step-nav rv-actions">
-                <ArButton
-                  variant="ghost"
-                  @click="goStep('pools')"
-                >
-                  <ArIcon
-                    name="chevron-left"
-                    size="sm"
-                    class="btn-icon-start"
-                  />
-                  Back to node pools
-                </ArButton>
-                <div class="rv-final">
-                  <div class="rv-final-cost">
-                    <span class="rf-k text-caption-1">Estimated cost</span>
-                    <span class="rf-v text-body-1">{{ fmtIRR(price.hourly) }} IRR/hour</span>
-                  </div>
+                <!-- step nav (inside the review card) -->
+                <div class="step-nav rv-actions">
                   <ArButton
-                    variant="primary"
-                    :loading="creating"
-                    :disabled="!createReady"
-                    @click="create"
+                    variant="ghost"
+                    @click="goStep('pools')"
                   >
-                    Create Kubernetes Cluster
+                    <ArIcon
+                      name="chevron-left"
+                      size="sm"
+                      class="btn-icon-start"
+                    />
+                    Back to node pools
                   </ArButton>
+                  <div class="rv-final">
+                    <div class="rv-final-cost">
+                      <span class="rf-k text-caption-1">Estimated cost</span>
+                      <span class="rf-v text-body-1">{{ fmtIRR(price.hourly) }} IRR/hour</span>
+                    </div>
+                    <ArButton
+                      variant="primary"
+                      :loading="creating"
+                      :disabled="!createReady"
+                      @click="create"
+                    >
+                      Create Kubernetes Cluster
+                    </ArButton>
+                  </div>
                 </div>
-              </div>
+              </ArSection>
             </div>
           </template>
 
@@ -1350,7 +1350,6 @@ function create() {
 .rv-pool-name { color: var(--fg-neutral-t1-1-default); }
 .rv-pool-line { color: var(--fg-neutral-t1-2-default); margin-top: 2px; }
 .rv-pool-line.muted { color: var(--fg-neutral-t1-3-default); }
-.rv-actions { justify-content: space-between; }
 .rv-final { display: flex; align-items: center; gap: var(--space-6); }
 .rv-final-cost { text-align: right; }
 .rf-k { display: block; color: var(--fg-neutral-t1-3-default); }
@@ -1361,6 +1360,13 @@ function create() {
   margin-top: var(--space-4); cursor: pointer;
 }
 .confirm-err { margin: var(--space-2) 0 0; color: var(--fg-error-t1-1-default); }
+/* the review step's nav row sits inside the ArSection card, above the card's bottom padding */
+.rv-actions {
+  justify-content: space-between;
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--st-neutral-t1-5-default);
+}
 /* three-step indicator (top right of the page header) */
 .steps {
   display: flex; align-items: center; gap: var(--space-3);

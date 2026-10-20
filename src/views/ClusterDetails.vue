@@ -325,6 +325,17 @@ const expandedPools = reactive({})
 const showAddPool = ref(false)
 const poolForm = reactive({ name: '', flavor: 'g6.xlarge.2', count: 2, labels: [], taints: [] })
 const poolFormOk = computed(() => /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(poolForm.name) && poolForm.count >= 1)
+/* deep link from the cluster list row menu: ?add=pool opens the Add node pool panel */
+watch(
+  () => route.query.add,
+  (v) => {
+    if (v === 'pool') {
+      showAddPool.value = true
+      router.replace({ query: { ...route.query, add: undefined } })
+    }
+  },
+  { immediate: true }
+)
 const K8S_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?$/
 const K8S_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
 const poolMetaOk = computed(() =>

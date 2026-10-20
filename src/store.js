@@ -177,6 +177,12 @@ export const store = reactive({
     this.toast('success', 'Labels updated', `${pool.name} now has ${labels.length} label${labels.length === 1 ? '' : 's'}.`)
   },
 
+  setClusterLabels(cluster, labels) {
+    cluster.labels = labels
+    this.events[cluster.id].unshift({ ts: timeNow(), type: 'Normal', reason: 'ClusterLabelsUpdated', msg: `Labels updated on cluster ${cluster.name}` })
+    this.toast('success', 'Labels updated', `${cluster.name} now has ${labels.length} label${labels.length === 1 ? '' : 's'}.`)
+  },
+
   removePool(cluster, pool) {
     cluster.pools = cluster.pools.filter((p) => p.id !== pool.id)
     this.events[cluster.id].unshift({ ts: timeNow(), type: 'Normal', reason: 'NodePoolDeleted', msg: `Node pool ${pool.name} deleted` })

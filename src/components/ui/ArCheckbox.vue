@@ -66,7 +66,10 @@ function onToggle() {
     border: 2px solid var(--st-neutral-t1-2-default);
     background-color: var(--bg-neutral-t1-1-default);
     border-radius: 4px;
-    transition: box-shadow 200ms ease, background-color .15s, border-color .15s;
+    /* box-shadow only — like the real component; a background-color
+       transition stalls in Chrome when the check svg swaps in the same
+       style recalc, leaving the box white while checked */
+    transition: box-shadow 200ms ease, border-color 150ms ease;
     cursor: inherit;
     appearance: none;
 }

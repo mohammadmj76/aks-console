@@ -11,6 +11,7 @@ import ArIcon from '../components/ui/ArIcon.vue'
 import ArRadio from '../components/ui/ArRadio.vue'
 import ArRadioGroup from '../components/ui/ArRadioGroup.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
+import ArTag from '../components/ui/ArTag.vue'
 import ArSection from '../components/ui/ArSection.vue'
 import ArSubHeader from '../components/ui/ArSubHeader.vue'
 import RegionSelect from '../components/ui/RegionSelect.vue'
@@ -115,33 +116,49 @@ function doDelete() {
 function menuAction(c, item) {
   if (item.action === 'view') router.push(`/clusters/${c.id}`)
   if (item.action === 'kube') downloadKubeconfig(c)
+  if (item.action === 'pool') router.push({ name: 'cluster-details', params: { id: c.id }, query: { tab: 'pools', add: 'pool' } })
+  if (item.action === 'label') askLabel(c)
   if (item.action === 'delete') askDelete(c)
 }
 
-/* tags column: first tag inline, "+N" chip reveals the rest on hover (teleported popover) */
-const hoverTags = ref(null)
-const pop = ref({ x: 0, y: 0, flip: false })
-let hideTimer = null
-function showTags(e, c) {
-  clearTimeout(hideTimer)
-  const r = e.currentTarget.getBoundingClientRect()
-  const vh = window.innerHeight || 800
-  const vw = window.innerWidth || 1200
-  const estH = c.labels.length * 34 + 20
-  const flip = r.bottom + estH + 12 > vh && r.top > estH + 12
-  pop.value = {
-    x: Math.max(8, Math.min(r.left, vw - 236)),
-    y: flip ? r.top - 6 : r.bottom + 6,
-    flip,
+/* add-label side panel (cluster-level labels) */
+const labelTarget = ref(null)
+const labelInput = ref('')
+const labelError = ref('')
+const labelList = ref([])
+const LABEL_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?$/
+const LABEL_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
+function askLabel(c) {
+  labelTarget.value = c
+  labelList.value = [...(c.labels || [])]
+  labelInput.value = ''
+  labelError.value = ''
+}
+function onLabelKeydown(e) {
+  if (e.key !== 'Enter') return
+  e.preventDefault?.()
+  const v = labelInput.value.trim()
+  if (!v) return
+  const [k, val] = v.split('=')
+  if (!LABEL_KEY.test(k) || val === undefined || !LABEL_VAL.test(val)) {
+    labelError.value = 'Use the key=value format: lowercase keys, values up to 63 characters.'
+    return
   }
-  hoverTags.value = c
+  if (labelList.value.includes(v)) {
+    labelError.value = 'This label is already added.'
+    return
+  }
+  if (labelList.value.length >= 20) {
+    labelError.value = 'You can add up to 20 labels.'
+    return
+  }
+  labelList.value.push(v)
+  labelInput.value = ''
+  labelError.value = ''
 }
-function hideTags() {
-  clearTimeout(hideTimer)
-  hideTimer = setTimeout(() => (hoverTags.value = null), 140)
-}
-function keepTags() {
-  clearTimeout(hideTimer)
+function saveLabels() {
+  if (labelTarget.value) store.setClusterLabels(labelTarget.value, [...labelList.value])
+  labelTarget.value = null
 }
 </script>
 
@@ -207,16 +224,12 @@ function keepTags() {
         </template>
 
         <template #item-name="{ item }">
-          <div>
-            <div class="cell-main">{{ item.name }}</div>
-            <div class="cell-sub mono">{{ item.id }}</div>
-          </div>
+          <span class="text-body-2">{{ item.name }}</span>
         </template>
 
         <template #item-status="{ item }">
           <div @click.stop>
             <ClusterStatus :status="item.status" />
-            <div v-if="item.upgrade" class="cell-sub">{{ item.upgrade.from }} → {{ item.upgrade.to }}</div>
           </div>
         </template>
 
@@ -242,13 +255,14 @@ function keepTags() {
 
         <template #item-tags="{ item }">
           <div v-if="item.labels?.length" class="tags-cell" @click.stop>
-            <span
+            <!-- panel pattern: first label inline, "+N" badge tooltips the full list -->
+            <ArBadge variant="neutral" :text="item.labels[0]" />
+            <ArBadge
               v-if="item.labels.length > 1"
-              class="tag-more"
-              @mouseenter="showTags($event, item)"
-              @mouseleave="hideTags"
-            >+{{ item.labels.length - 1 }}</span>
-            <span class="ar-tag mono">{{ item.labels[0] }}</span>
+              variant="neutral"
+              :text="`+${item.labels.length - 1}`"
+              v-tippy="{ placement: 'top', arrow: true, content: item.labels.join(',') }"
+            />
           </div>
           <span v-else class="text-body-2 muted">—</span>
         </template>
@@ -258,6 +272,8 @@ function keepTags() {
             :items="[
               { label: 'View details', action: 'view' },
               { label: 'Download kubeconfig', action: 'kube' },
+              { label: 'Create node pool', action: 'pool' },
+              { label: 'Add label', action: 'label' },
               { sep: true },
               { label: 'Delete cluster', danger: true, action: 'delete' },
             ]"
@@ -308,9 +324,36 @@ function keepTags() {
       </template>
     </ArSidePanel>
 
+    <!-- add label (cluster-level; same input pattern as the create flow) -->
+    <ArSidePanel :open="!!labelTarget" title="Add label" :subtitle="labelTarget?.name" @close="labelTarget = null">
+      <div class="ar-field">
+        <label>Labels</label>
+        <div class="label-input-row">
+          <div class="ArInput" :class="{ 'error-mode': labelError }">
+            <input
+              v-model="labelInput"
+              placeholder="Confirm labels with enter"
+              spellcheck="false"
+              @input="labelError = ''"
+              @keydown="onLabelKeydown"
+            />
+          </div>
+          <ArButton variant="secondary" icon="plus" aria-label="Add label" @click="onLabelKeydown({ key: 'Enter' })" />
+        </div>
+        <span v-if="labelError" class="label-err text-caption-1-strong">{{ labelError }}</span>
+        <span v-else class="label-hint text-caption-1">After typing each label, press the Enter key.</span>
+        <div v-if="labelList.length" class="label-tags">
+          <ArTag v-for="l in labelList" :key="l" class="mono" @click="labelList = labelList.filter((x) => x !== l)">{{ l }}</ArTag>
+        </div>
+      </div>
+      <template #footer>
+        <ArButton variant="tertiary" @click="labelTarget = null">Cancel</ArButton>
+        <ArButton variant="primary" @click="saveLabels">Save</ArButton>
+      </template>
+    </ArSidePanel>
+
     <!-- delete confirmation -->
-    <ArSidePanel :open="!!deleteTarget" title="Delete cluster" :subtitle="deleteTarget?.name" @close="deleteTarget = null">
-      <div class="banner error" style="margin-bottom: var(--space-4)">
+    <ArSidePanel :open="!!deleteTarget" title="Delete cluster" :subtitle="deleteTarget?.name" @close="deleteTarget = null">      <div class="banner error" style="margin-bottom: var(--space-4)">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 5.2v3.4M8 11.4v.2"/><circle cx="8" cy="8" r="6.2"/></svg>
         Deleting removes the control plane, all node pools and their volumes. This cannot be undone.
       </div>
@@ -325,20 +368,6 @@ function keepTags() {
         <ArButton variant="danger" :disabled="!deleteReady" @click="doDelete">Delete cluster</ArButton>
       </template>
     </ArSidePanel>
-
-    <!-- hidden tags popover (hover on "+N") -->
-    <Teleport to="body">
-      <div
-        v-if="hoverTags"
-        class="tags-pop"
-        :class="{ flip: pop.flip }"
-        :style="{ top: pop.y + 'px', left: pop.x + 'px' }"
-        @mouseenter="keepTags"
-        @mouseleave="hideTags"
-      >
-        <span v-for="l in hoverTags.labels.slice(1)" :key="l" class="ar-tag mono">{{ l }}</span>
-      </div>
-    </Teleport>
   </main>
 </template>
 
@@ -388,19 +417,18 @@ function keepTags() {
   gap: var(--space-3);
 }
 
-/* cell content carried over from the old table */
-.cell-main {
-  font-size: 14px;
-  line-height: 20px;
-  letter-spacing: -0.28px;
-  color: var(--fg-neutral-t1-1-default);
+/* add-label panel */
+.label-err {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--fg-error-t1-1-default);
 }
-.cell-sub {
-  font-size: 12px;
-  line-height: 16px;
-  letter-spacing: -0.24px;
+.label-hint {
+  display: block;
+  margin-top: var(--space-2);
   color: var(--fg-neutral-t1-3-default);
 }
+
 .tags-cell {
   display: flex;
   align-items: center;
