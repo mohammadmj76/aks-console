@@ -402,57 +402,59 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         />
       </div>
 
-      <!-- selected specification (single) — Multi AZ only: in Single AZ the
-           pool follows the master's AZ, so the AZ checkbox row is redundant -->
+      <!-- selected specification — zone chips instead of the old nested table
+           (user testing: the table-based AZ selection was confusing) -->
       <div
-        v-if="pool.specs.length && !allowedZones.length"
+        v-if="pool.specs.length"
         class="spec-box"
       >
         <h4 class="text-body-1 spec-title">Selected Specification</h4>
-        <ArTable
-          :columns="[
-            { label: 'Specifications', name: 'spec' },
-            { label: 'Pricing', name: 'price' },
-            { label: 'AZ', name: 'az' },
-          ]"
-          :items="[{ id: 'spec' }]"
-          key-field="id"
+        <p class="spec-line text-body-2">
+          {{ selectedFlavor?.category }} ·
+          <span class="mono">{{ pool.specs[0].flavorId }}</span> ·
+          {{ selectedFlavor?.vcpu }} vCPUs ·
+          {{ selectedFlavor?.ram }} GiB ·
+          {{ fmtIRR(Math.round(selectedFlavor?.pricePerHour * 730 || 0)) }} IRR/month
+        </p>
+        <template v-if="!allowedZones.length">
+          <span class="text-caption-1 muted">Availability Zones — the nodes run only in the zones you select.</span>
+          <div class="chip-row">
+            <label
+              v-for="z in flavorZones(selectedFlavor)"
+              :key="z.id"
+              class="zone-chip text-body-2"
+              :class="{
+                on: pool.specs[0].zones.includes(z.id),
+                off: z.soldOut,
+              }"
+            >
+              <ArCheckbox
+                :model-value="pool.specs[0].zones.includes(z.id)"
+                :disabled="z.soldOut"
+                @update:model-value="specToggleZone(z.id, selectedFlavor)"
+              />
+              {{ zoneName(z.id) }}
+              <ArBadge
+                v-if="z.soldOut"
+                variant="danger"
+                size="sm"
+                text="Sold out"
+              />
+            </label>
+          </div>
+          <span
+            v-if="!pool.specs[0].zones.length"
+            class="spec-err text-caption-1-strong"
+          >
+            Select at least one availability zone for this flavor.
+          </span>
+        </template>
+        <p
+          v-else
+          class="spec-line text-caption-1 muted"
         >
-          <template #row>
-            <ArTableRow>
-              <ArTableCell class="text-body-2-strong">
-                {{ selectedFlavor?.category }} /
-                <span class="mono">{{ pool.specs[0].flavorId }}</span> ·
-                {{ selectedFlavor?.vcpu }} vCPUs /
-                {{ selectedFlavor?.ram }} GiB
-              </ArTableCell>
-              <ArTableCell>{{ fmtIRR(Math.round(selectedFlavor?.pricePerHour * 730 || 0)) }} IRR/month</ArTableCell>
-              <ArTableCell>
-                <div class="chip-row">
-                  <label
-                    v-for="z in flavorZones(selectedFlavor)"
-                    :key="z.id"
-                    class="check-line text-body-2"
-                    :style="z.soldOut ? 'opacity:.5' : ''"
-                  >
-                    <ArCheckbox
-                      :model-value="pool.specs[0].zones.includes(z.id)"
-                      :disabled="z.soldOut"
-                      @update:model-value="specToggleZone(z.id, selectedFlavor)"
-                    />
-                    {{ z.soldOut ? `${zoneName(z.id)} (Sold out)` : zoneName(z.id) }}
-                  </label>
-                </div>
-              </ArTableCell>
-            </ArTableRow>
-          </template>
-        </ArTable>
-        <span
-          v-if="!pool.specs[0].zones.length"
-          class="spec-err text-caption-1-strong"
-        >
-          Select at least one availability zone for this flavor.
-        </span>
+          Single AZ — the nodes run in {{ zoneName(allowedZones[0]) }}, the same availability zone as the control plane.
+        </p>
       </div>
 
       <!-- root disk — per-pool root volume size in GB; the stepper sits
@@ -701,7 +703,22 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
   display: flex; flex-direction: column; gap: var(--space-3);
 }
 .spec-title { margin: 0 0 var(--space-3); }
+.spec-line { margin: 0; color: var(--fg-neutral-t1-2-default); }
+.spec-line .mono { color: var(--fg-neutral-t1-1-default); }
 .spec-err { color: var(--fg-error-t1-1-default); }
+.zone-chip {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  border: 1px solid var(--st-neutral-t1-5-default); border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3); cursor: pointer;
+  color: var(--fg-neutral-t1-2-default); background: var(--bg-neutral-t1-1-default);
+}
+.zone-chip:hover:not(.off) { border-color: var(--st-primary-t1-1-default); }
+.zone-chip.on {
+  border-color: var(--st-primary-t1-1-default);
+  background: var(--bg-primary-t2-1-default);
+  color: var(--fg-neutral-t1-1-default);
+}
+.zone-chip.off { opacity: .55; cursor: not-allowed; }
 .root-disk-box {
   border: 1px solid var(--st-neutral-t1-5-default); border-radius: var(--radius-md);
   padding: var(--space-4) var(--space-6);

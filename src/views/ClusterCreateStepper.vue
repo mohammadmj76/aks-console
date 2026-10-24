@@ -190,6 +190,10 @@ function cidrError(r, maxPrefix) {
 }
 const podCidrError = computed(() => cidrError(draft.podCidrs[0], 28))
 const svcCidrError = computed(() => cidrError(draft.svcCidrs[0], 20))
+/* user testing: users worried about future capacity — warn when the range
+   leaves little room to grow (pod /24 ≈ 256 IPs, service /26 ≈ 64 IPs) */
+const podSmallRange = computed(() => !podCidrError.value && +draft.podCidrs[0].prefix >= 24)
+const svcSmallRange = computed(() => !svcCidrError.value && +draft.svcCidrs[0].prefix >= 26)
 function sanitizeOctet(v) {
   return String(v).replace(/[^\d]/g, '').slice(0, 3)
 }
@@ -343,6 +347,26 @@ const price = computed(() => {
 
 /* rail helpers */
 const zoneName = (id) => REGION.zones.find((z) => z.id === id)?.name || id
+
+/* ---- control plane distribution: explainer + per-AZ visual ----
+   (user testing: the Single/Multi AZ choice and its effect on the
+   cluster architecture were not clear enough) */
+const distExplainer = computed(() =>
+  masterDist.value === 'custom'
+    ? 'All control plane nodes run in one availability zone. Suitable for test environments, or when cost matters more than availability.'
+    : 'Control plane nodes are spread across all availability zones — if one zone has a problem, the others keep the cluster running. Recommended for production.'
+)
+const distPerZone = computed(() => {
+  const replicas = cpPlan.value?.replicas || 3
+  const zones = REGION.zones.map((z) => z.id)
+  if (masterDist.value === 'custom') {
+    return zones.map((z) => ({ id: z, name: zoneName(z), masters: z === masterHostAz.value ? replicas : 0 }))
+  }
+  const base = Math.floor(replicas / zones.length)
+  const extra = replicas % zones.length
+  return zones.map((z, i) => ({ id: z, name: zoneName(z), masters: base + (i < extra ? 1 : 0) }))
+})
+
 const railZones = computed(() =>
   [...new Set(draft.subnetIds.map((id) => vpc.value?.subnets.find((s) => s.id === id)?.zone).filter(Boolean))]
 )
@@ -594,10 +618,10 @@ function create() {
                   </ArCard>
                 </div>
 
-                <!-- Master distribution -->
+                <!-- Control plane distribution -->
                 <div class="flex flex-column gap-2 margin-top-6">
                   <div class="flex align-items-center">
-                    <span class="text-body-2-strong">Master Distribution</span>
+                    <span class="text-body-2-strong">Control Plane Distribution</span>
                     <ArIcon
                       name="info"
                       size="sm"
@@ -637,6 +661,30 @@ function create() {
                       Insufficient resources in the specified AZ may cause the control plane node creation to fail, affecting the overall cluster creation process.
                     </p>
                   </template>
+                  <p class="scale-note m-0 text-caption-1">
+                    {{ distExplainer }}
+                  </p>
+                  <!-- where the control plane nodes land, per AZ -->
+                  <div class="dist-strip">
+                    <div
+                      v-for="z in distPerZone"
+                      :key="z.id"
+                      class="dist-zone"
+                      :class="{ empty: !z.masters }"
+                    >
+                      <span class="dz-name text-body-2">{{ z.name }}</span>
+                      <ArBadge
+                        v-if="z.masters"
+                        variant="primary"
+                        size="sm"
+                        :text="`${z.masters}× Control plane`"
+                      />
+                      <span
+                        v-else
+                        class="text-caption-1 muted"
+                      >No control plane nodes</span>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="flex flex-column gap-2 margin-top-6" style="max-width: 520px">
@@ -814,6 +862,11 @@ function create() {
                       <strong class="cidr-cap">{{ cidrCapacity(draft.podCidrs[0]) }}</strong> Pods.
                     </p>
                     <ArAlert
+                      v-if="podSmallRange"
+                      type="warning"
+                      description="This range is small — it supports about 256 Pods. If the cluster will grow, choose a larger range (a shorter prefix)."
+                    />
+                    <ArAlert
                       type="warning"
                       description="CIDR block cannot be modified after the cluster is created. Ensure it does not overlap with the VPC and subnet CIDR blocks to prevent communication issues."
                     />
@@ -896,6 +949,11 @@ function create() {
                       <strong class="cidr-cap">{{ cidrCapacity(draft.svcCidrs[0]) }}</strong> Services.
                     </p>
                     <ArAlert
+                      v-if="svcSmallRange"
+                      type="warning"
+                      description="This range is small — it supports about 64 Services. If the cluster will run many workloads, choose a larger range (a shorter prefix)."
+                    />
+                    <ArAlert
                       type="warning"
                       description="CIDR block cannot be modified after the cluster is created. Ensure it does not overlap with the subnet CIDR blocks of dependent middleware (such as RDS and Redis) to prevent communication issues."
                     />
@@ -960,7 +1018,7 @@ function create() {
             <div class="create-sections">
               <ArSection
                 title="Node Pools"
-                description="Configure up to 3 groups of nodes. Pools are optional — you can also add them after creation."
+                description="A node pool is a group of worker nodes with the same flavor and settings — your workloads run on them. Pools are optional: add them now or after the cluster is ready, and each pool can have a different flavor and settings."
               >
                 <div class="pool-list">
                   <PoolCard
@@ -1031,7 +1089,7 @@ function create() {
                     <div class="rv-row text-body-2"><span class="rv-k">Region</span><span class="rv-v">{{ region?.name }}</span></div>
                     <div class="rv-row text-body-2"><span class="rv-k">Availability Zones</span><span class="rv-v">{{ railZones.length ? railZones.map(zoneName).join(', ') : '—' }}</span></div>
                     <div class="rv-row text-body-2"><span class="rv-k">Cluster Type</span><span class="rv-v">{{ cpPlan?.name }}</span></div>
-                    <div class="rv-row text-body-2"><span class="rv-k">Master Distribution</span><span class="rv-v">{{ masterDist === 'automatic' ? 'Multi AZ' : `Single AZ · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` }}</span></div>
+                    <div class="rv-row text-body-2"><span class="rv-k">Control Plane Distribution</span><span class="rv-v">{{ masterDist === 'automatic' ? 'Multi AZ' : `Single AZ · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` }}</span></div>
                     <div class="rv-row text-body-2"><span class="rv-k">Kubernetes Version</span><span class="rv-v">{{ VERSIONS.find((v) => v.id === draft.version)?.patch }}</span></div>
                     <div
                       v-if="draft.labels.length"
@@ -1165,7 +1223,7 @@ function create() {
             <h4>Cluster Type and Version</h4>
             <div class="rail-text">
               <p>Cluster Type: {{ cpPlan?.name }}</p>
-              <p>Master Distribution: {{ masterDist === 'automatic' ? 'Multi AZ' : `Single AZ · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` }}</p>
+              <p>Control Plane Distribution: {{ masterDist === 'automatic' ? 'Multi AZ' : `Single AZ · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` }}</p>
               <p>Kubernetes Version: {{ VERSIONS.find((v) => v.id === draft.version)?.patch }}</p>
             </div>
           </div>
@@ -1231,7 +1289,7 @@ function create() {
                 v-if="!step1Ok"
                 class="text-caption-1 muted rail-hint"
               >
-                Complete the cluster name, subnets, CIDR blocks and master distribution to continue.
+                Complete the cluster name, subnets, CIDR blocks and control plane distribution to continue.
               </span>
             </template>
             <template v-else>
@@ -1333,6 +1391,25 @@ function create() {
 
 /* pool accordion list */
 .pool-list { display: flex; flex-direction: column; gap: var(--space-4); }
+
+/* control plane distribution strip: one tile per AZ with its node count */
+.dist-strip {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.dist-zone {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid var(--st-neutral-t1-5-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-neutral-t1-4-default);
+}
+.dist-zone.empty { background: transparent; }
+.dz-name { color: var(--fg-neutral-t1-2-default); }
+.dist-zone:not(.empty) .dz-name { color: var(--fg-neutral-t1-1-default); }
 
 /* review step — full-width layout: the summary rail is hidden on step 3 */
 .wizard-grid.no-rail { grid-template-columns: 1fr; }

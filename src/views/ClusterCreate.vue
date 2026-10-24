@@ -530,10 +530,10 @@ function create() {
                         </ArCard>
                     </div>
 
-                    <!-- Master distribution -->
+                    <!-- Control plane distribution -->
                     <div class="flex flex-column gap-2 margin-top-6">
                         <div class="flex align-items-center">
-                            <span class="text-body-2-strong">Master Distribution</span>
+                            <span class="text-body-2-strong">Control Plane Distribution</span>
                             <ArIcon
                                 name="info"
                                 size="sm"
@@ -962,7 +962,7 @@ function create() {
                         <h4>Cluster Type and Version</h4>
                         <div class="rail-text">
                             <p>Cluster Type: {{ cpPlan?.name }}</p>
-                            <p>Master Distribution: {{ masterDist === 'automatic' ? 'Multi AZ' : `Single AZ · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` }}</p>
+                            <p>Control Plane Distribution: {{ masterDist === 'automatic' ? 'Multi AZ' : `Single AZ · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` }}</p>
                             <p>Kubernetes Version: {{ VERSIONS.find((v) => v.id === draft.version)?.patch }}</p>
                         </div>
                     </div>
