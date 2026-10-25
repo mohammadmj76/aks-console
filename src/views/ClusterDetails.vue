@@ -490,6 +490,10 @@ function menuAction(item) {
         </div>
       </div>
       <div style="display: flex; gap: var(--space-3)">
+        <ArButton variant="secondary" @click="router.push(`/clusters/${cluster.id}/v2`)">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m6 3 5 5-5 5"/></svg>
+          New view
+        </ArButton>
         <ArButton variant="secondary" @click="downloadKubeconfig(cluster)">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m0 0 3-3M8 10 5 7M3 13h10"/></svg>
           Kubeconfig
