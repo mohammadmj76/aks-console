@@ -6,6 +6,7 @@ import { REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, VPCS, apiEndpoint, fmtDate,
 import { genPoints, genTimes, seedHash } from '../metrics'
 import MetricsChart from '../components/ui/MetricsChart.vue'
 import ArButton from '../components/ui/ArButton.vue'
+import ArBadge from '../components/ui/ArBadge.vue'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
 import DonutGauge from '../components/ui/DonutGauge.vue'
@@ -483,7 +484,7 @@ function menuAction(item) {
         <div class="title-row">
           <h1 class="text-title-2" style="margin: 0">{{ cluster.name }}</h1>
           <ClusterStatus :status="cluster.status" />
-          <span class="ar-badge neutral pill">v{{ cluster.version }}</span>
+          <ArBadge variant="neutral" :text="`v${cluster.version}`" />
         </div>
         <div class="meta">
           <span class="text-body-2 muted">created {{ fmtDate(cluster.createdAt) }}</span>
@@ -606,7 +607,7 @@ function menuAction(item) {
                 <tr v-for="m in masterNodes" :key="m.name">
                   <td class="cell-main">{{ m.name }}</td>
                   <td>
-                    <span class="ar-tag" :class="m.status === 'Running' ? 'success' : 'error'"><span class="dot"></span>{{ m.status }}</span>
+                    <ArBadge :variant="m.status === 'Running' ? 'success' : 'danger'" :prepend-icon="m.status === 'Running' ? 'check-circle' : 'error'" :text="m.status" />
                   </td>
                   <td class="text-body-2 muted">{{ m.az }}</td>
                   <td><ArProgress :value="m.cpu" :label="m.cpu.toFixed(2) + ' %'" /></td>
@@ -655,10 +656,8 @@ function menuAction(item) {
               · {{ pool.zones.length ? pool.zones.map((z) => REGION.zones.find((zz) => zz.id === z)?.name).join(', ') : 'all zones' }}
             </div>
             <div v-if="(pool.labels?.length || pool.taints?.length)" class="pool-meta" style="margin-top: var(--space-2)">
-              <span v-for="l in pool.labels || []" :key="l" class="ar-tag mono" style="font-size: 11px">{{ l }}</span>
-              <span v-for="(t, i) in pool.taints || []" :key="'t' + i" class="ar-tag warning mono" style="font-size: 11px">
-                <span class="dot"></span>{{ t.key }}{{ t.value ? '=' + t.value : '' }}:{{ t.effect }}
-              </span>
+              <ArBadge v-for="l in pool.labels || []" :key="l" variant="neutral" :text="l" />
+              <ArBadge v-for="(t, i) in pool.taints || []" :key="'t' + i" variant="warning" prepend-icon="warning" :text="`${t.key}${t.value ? '=' + t.value : ''}:${t.effect}`" />
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: var(--space-2)">
@@ -675,7 +674,7 @@ function menuAction(item) {
               <tr v-for="n in nodesOf(pool)" :key="n.name">
                 <td class="mono">{{ n.name }}</td>
                 <td>
-                  <span class="ar-tag" :class="n.ready ? 'success' : 'error'"><span class="dot"></span>{{ n.ready ? 'Ready' : 'NotReady' }}</span>
+                  <ArBadge :variant="n.ready ? 'success' : 'danger'" :prepend-icon="n.ready ? 'check-circle' : 'error'" :text="n.ready ? 'Ready' : 'NotReady'" />
                 </td>
                 <td class="text-body-2 muted">{{ flavorName(n.flavor) }}</td>
                 <td class="text-body-2 muted">{{ REGION.zones.find((z) => z.id === n.zone)?.name }}</td>
@@ -701,10 +700,8 @@ function menuAction(item) {
             <div class="row"><span class="k" style="width: 120px">VPC</span><span class="v">{{ vpc?.name }} <span class="mono muted">({{ vpc?.cidr }})</span></span></div>
             <div class="row">
               <span class="k" style="width: 120px">Subnets</span>
-              <span class="v" style="display: flex; flex-direction: column; gap: var(--space-2)">
-                <span v-for="sid in cluster.subnetIds" :key="sid" class="ar-tag">
-                  {{ vpc?.subnets.find((s) => s.id === sid)?.name }} · {{ vpc?.subnets.find((s) => s.id === sid)?.cidr }} · {{ REGION.zones.find((z) => z.id === vpc?.subnets.find((s) => s.id === sid)?.zone)?.name }}
-                </span>
+              <span class="v" style="display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start">
+                <ArBadge v-for="sid in cluster.subnetIds" :key="sid" variant="neutral" :text="`${vpc?.subnets.find((s) => s.id === sid)?.name} · ${vpc?.subnets.find((s) => s.id === sid)?.cidr} · ${REGION.zones.find((z) => z.id === vpc?.subnets.find((s) => s.id === sid)?.zone)?.name}`" />
               </span>
             </div>
           </div>
@@ -722,7 +719,7 @@ function menuAction(item) {
         <div class="ar-card" style="padding: var(--space-6)">
           <h3 class="text-title-3" style="margin: 0 0 var(--space-4)">API server access</h3>
           <div class="kv">
-            <div class="row"><span class="k" style="width: 120px">Access</span><span class="v"><span class="ar-badge success pill">Public</span></span></div>
+            <div class="row"><span class="k" style="width: 120px">Access</span><span class="v"><ArBadge variant="success" prepend-icon="check-circle" text="Public" /></span></div>
             <div class="row"><span class="k" style="width: 120px">Endpoint</span><span class="v mono" style="font-size: 12px; display: flex; align-items: center; gap: var(--space-2)">
               {{ apiEndpoint(cluster) }}
               <button class="ar-btn ghost icon sm" title="Copy" @click="copy(apiEndpoint(cluster))">
@@ -803,7 +800,7 @@ function menuAction(item) {
               <h3 class="text-title-3" style="margin: 0">Control-plane backups</h3>
               <p class="text-body-2 muted" style="margin: 2px 0 0">Daily etcd snapshots with cross-AZ replication. Always on.</p>
             </div>
-            <span class="ar-badge success pill">{{ cluster.etcdBackup.restorePoints }} restore points</span>
+            <ArBadge variant="success" prepend-icon="check-circle" :text="`${cluster.etcdBackup.restorePoints} restore points`" />
           </div>
           <div class="kv">
             <div class="row"><span class="k" style="width: 120px">Schedule</span><span class="v">Daily at 02:00 (ir-tz)</span></div>
@@ -818,7 +815,7 @@ function menuAction(item) {
               <h3 class="text-title-3" style="margin: 0">Audit logs</h3>
               <p class="text-body-2 muted" style="margin: 2px 0 0">API-server and platform actions streamed to Cloud Logs.</p>
             </div>
-            <span class="ar-badge" :class="cluster.auditLogs ? 'success' : 'neutral'">{{ cluster.auditLogs ? 'Streaming' : 'Off' }}</span>
+            <ArBadge :variant="cluster.auditLogs ? 'success' : 'neutral'" :prepend-icon="cluster.auditLogs ? 'check-circle' : ''" :text="cluster.auditLogs ? 'Streaming' : 'Off'" />
           </div>
           <p class="text-caption-1 muted" style="margin: var(--space-3) 0 0">Audit log delivery is managed with your Cloud Logs project — see the Cloud Logs console.</p>
         </div>
@@ -911,7 +908,7 @@ function menuAction(item) {
             <tbody>
               <tr v-for="(e, i) in omEvents" :key="i">
                 <td class="mono muted">{{ e.generated }}</td>
-                <td><span class="ar-badge" :class="e.level === 'Warning' ? 'warning' : 'neutral'">{{ e.level }}</span></td>
+                <td><ArBadge :variant="e.level === 'Warning' ? 'warning' : 'neutral'" :prepend-icon="e.level === 'Warning' ? 'warning' : ''" :text="e.level" /></td>
                 <td class="text-body-2-strong">{{ e.name }}</td>
                 <td class="text-body-2 muted">{{ e.remarks }}</td>
                 <td class="text-body-2" :class="e.error === '—' ? 'muted' : ''">{{ e.error }}</td>
@@ -942,9 +939,7 @@ function menuAction(item) {
                   <div class="cell-sub mono">{{ e.obj }}</div>
                 </td>
                 <td>
-                  <span class="ar-tag" :class="e.type === 'Alarm' ? 'warning' : 'success'">
-                    <span class="dot"></span>{{ e.type }}
-                  </span>
+                  <ArBadge :variant="e.type === 'Alarm' ? 'warning' : 'success'" :prepend-icon="e.type === 'Alarm' ? 'warning' : 'check-circle'" :text="e.type" />
                 </td>
                 <td class="text-body-2-strong">{{ e.name }}</td>
                 <td class="text-body-2 muted">{{ e.msg }}</td>
@@ -964,7 +959,7 @@ function menuAction(item) {
     </template>
 
     <!-- ================= NODE MONITORING PANEL ================= -->
-    <ArSidePanel :open="monitorPanel" :title="`Node Monitoring ${monitorNode?.name || ''}`" :subtitle="`${cluster?.name} · ${monitorNode?.az || ''}`" @close="monitorPanel = false">
+    <ArSidePanel :open="monitorPanel" size="md" :title="`Node Monitoring ${monitorNode?.name || ''}`" :subtitle="`${cluster?.name} · ${monitorNode?.az || ''}`" @close="monitorPanel = false">
       <div class="banner info" style="align-items: flex-start">
         <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
         <span>Monitoring data is collected by the platform metrics agent. Data missing at any time point indicates that no data was reported.</span>
@@ -1082,12 +1077,12 @@ function menuAction(item) {
       <div class="ar-field">
         <label>Node labels</label>
         <div class="tagbox">
-          <span v-for="l in poolForm.labels" :key="l" class="ar-tag mono" style="font-size: 11px">
+          <ArBadge v-for="l in poolForm.labels" :key="l" variant="neutral">
             {{ l }}
             <button class="tag-x" aria-label="Remove label" @click="removePoolLabel(l)">
               <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
             </button>
-          </span>
+          </ArBadge>
           <input v-model="poolLabelInput" placeholder="key=value" spellcheck="false" @input="poolLabelError = ''" @keydown="onPoolLabelKeydown" />
         </div>
         <span v-if="poolLabelError" class="error-text">{{ poolLabelError }}</span>

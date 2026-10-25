@@ -569,9 +569,6 @@ function create() {
                                     />
                                 </ArRadioGroup>
                             </div>
-                            <p class="scale-note warn-note m-0 text-caption-1">
-                                Insufficient resources in the specified AZ may cause the control plane node creation to fail, affecting the overall cluster creation process.
-                            </p>
                         </template>
                     </div>
 

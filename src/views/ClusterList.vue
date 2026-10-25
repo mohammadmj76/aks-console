@@ -180,7 +180,7 @@ function saveLabels() {
           <div class="list-head-txt">
             <div class="list-title-row">
               <h6 class="text-body-1" style="margin: 0">Cluster List</h6>
-              <span class="ar-badge beta pill">Beta</span>
+              <ArBadge variant="info" text="Beta" />
               <ArIcon
                 name="info"
                 size="sm"
@@ -295,7 +295,7 @@ function saveLabels() {
           <div class="list-head-txt">
             <div class="list-title-row">
               <h6 class="text-body-1" style="margin: 0">Cluster List</h6>
-              <span class="ar-badge beta pill">Beta</span>
+              <ArBadge variant="info" text="Beta" />
             </div>
           </div>
           <div class="list-head-actions">

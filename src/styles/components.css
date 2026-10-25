@@ -40,41 +40,6 @@
 .ar-btn.loading { pointer-events: none; opacity: .85; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---------- ArBadge / ArTag ---------- */
-.ar-badge {
-  display: inline-flex; align-items: center; justify-content: center; gap: 2px;
-  padding: 4px; border-radius: var(--radius-xs);
-  font-size: 12px; font-weight: 600; line-height: 16px; letter-spacing: -0.24px;
-  white-space: nowrap; flex: none;
-}
-.ar-badge.pill { border-radius: var(--radius-circular); }
-.ar-badge.success { background: var(--bg-success-t2-1-default); color: var(--fg-success-t2-2-default); }
-.ar-badge.error   { background: var(--bg-error-t2-1-default);   color: var(--fg-error-t2-1-default); }
-.ar-badge.warning { background: var(--bg-warning-t2-1-default); color: var(--fg-warning-t2-1-default); }
-.ar-badge.info    { background: var(--bg-info-t2-1-default);    color: var(--fg-info-t2-1-default); }
-.ar-badge.primary { background: var(--bg-primary-t2-1-default); color: var(--fg-primary-t2-1-default); }
-.ar-badge.neutral { background: var(--bg-neutral-t1-4-default); color: var(--fg-neutral-t1-3-default); }
-.ar-badge.beta    { background: var(--bg-violet-t3-1-default);  color: var(--fg-violet-t1-1-default); text-transform: uppercase; }
-
-.ar-tag {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 0 var(--space-1);
-  border: 1px solid var(--st-neutral-t3-3-default); border-radius: var(--radius-xs);
-  background: var(--bg-neutral-t1-1-default);
-  font-size: 12px; font-weight: 400; line-height: 16px; letter-spacing: -0.24px;
-  color: var(--fg-neutral-t1-1-default);
-  white-space: nowrap;
-}
-.ar-tag .dot { width: 7px; height: 7px; border-radius: var(--radius-circular); background: var(--st-neutral-t1-5-default); }
-.ar-tag.success .dot { background: var(--bg-success-t2-1-default); }
-.ar-tag.warning .dot { background: var(--bg-warning-t1-1-default); }
-.ar-tag.error   .dot { background: var(--bg-error-t2-1-default); }
-.ar-tag.primary .dot { background: var(--bg-primary-t3-1-default); }
-.ar-tag.info    .dot { background: var(--bg-info-t2-1-default); }
-/* pulsing dot for provisioning / upgrading */
-.ar-tag .dot.pulse { animation: pulse 1.4s ease-in-out infinite; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
-
 /* ---------- ArCard ---------- */
 .ar-card {
   background: var(--bg-neutral-t1-1-default);
@@ -211,6 +176,8 @@
   transform: translateX(105%); transition: transform .25s cubic-bezier(.2,.7,.2,1);
 }
 .side-panel.open { transform: translateX(0); }
+/* sizes mirror @panel/uikit ArSidePanel: sm = 480px, md = 720px */
+.side-panel--md { width: 720px; }
 .side-panel header { padding: var(--space-6); padding-bottom: var(--space-4); border-bottom: 1px solid var(--st-neutral-t1-5-default); display: flex; justify-content: space-between; gap: var(--space-4); }
 .side-panel .body { flex: 1; overflow: auto; padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-6); }
 .side-panel footer { padding: var(--space-4) var(--space-6); border-top: 1px solid var(--st-neutral-t1-5-default); display: flex; gap: var(--space-3); justify-content: flex-end; background: var(--bg-neutral-t1-1-default); }

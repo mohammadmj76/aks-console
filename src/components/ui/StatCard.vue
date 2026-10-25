@@ -1,4 +1,6 @@
 <script setup>
+import ArBadge from './ArBadge.vue'
+
 defineProps({
   label: String,
   badge: String,
@@ -12,7 +14,7 @@ defineProps({
   <div class="ar-card stat-card">
     <div class="top">
       <span class="text-caption-1-strong muted">{{ label }}</span>
-      <span v-if="badge" class="ar-badge pill" :class="badgeTone">{{ badge }}</span>
+      <ArBadge v-if="badge" :variant="badgeTone" :text="badge" />
     </div>
     <p class="text-title-1 value">
       {{ value }}<span v-if="unit" class="unit"> {{ unit }}</span>

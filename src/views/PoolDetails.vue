@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { store } from '../store'
 import { REGION, VPCS, FLAVOR_CATALOG, fmtDate, flavorName } from '../data'
 import ArButton from '../components/ui/ArButton.vue'
+import ArBadge from '../components/ui/ArBadge.vue'
 import ArProgress from '../components/ui/ArProgress.vue'
 import ArEmpty from '../components/ui/ArEmpty.vue'
 import PoolActions from '../components/PoolActions.vue'
@@ -149,7 +150,7 @@ const poolEvents = computed(() =>
             <tr v-for="n in nodes" :key="n.name">
               <td class="mono">{{ n.name }}</td>
               <td>
-                <span class="ar-tag" :class="n.ready ? 'success' : 'error'"><span class="dot"></span>{{ n.ready ? 'Ready' : 'NotReady' }}</span>
+                <ArBadge :variant="n.ready ? 'success' : 'danger'" :prepend-icon="n.ready ? 'check-circle' : 'error'" :text="n.ready ? 'Ready' : 'NotReady'" />
               </td>
               <td class="text-body-2 muted">{{ flavorName(n.flavor) }}</td>
               <td class="text-body-2 muted">{{ REGION.zones.find((z) => z.id === n.zone)?.name }}</td>
@@ -185,9 +186,7 @@ const poolEvents = computed(() =>
             <div class="row">
               <span class="k" style="width: 120px">Flavor{{ poolFlavors.length > 1 ? 's' : '' }}</span>
               <span class="v" style="display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start">
-                <span v-for="f in poolFlavors" :key="f.id" class="ar-tag mono">
-                  {{ f.id }} · {{ f.vcpu }} vCPU / {{ f.ram }} GB · {{ f.category }}
-                </span>
+                <ArBadge v-for="f in poolFlavors" :key="f.id" variant="neutral" :text="`${f.id} · ${f.vcpu} vCPU / ${f.ram} GB · ${f.category}`" />
               </span>
             </div>
             <div class="row"><span class="k" style="width: 120px">Node count</span><span class="v">{{ pool.count }}</span></div>
@@ -195,15 +194,13 @@ const poolEvents = computed(() =>
             <div class="row">
               <span class="k" style="width: 120px">Zones</span>
               <span class="v" style="display: flex; flex-wrap: wrap; gap: var(--space-1)">
-                <span v-for="z in zoneNames" :key="z" class="ar-tag">{{ z }}</span>
+                <ArBadge v-for="z in zoneNames" :key="z" variant="neutral" :text="z" />
               </span>
             </div>
             <div class="row">
               <span class="k" style="width: 120px">Subnets</span>
               <span class="v" style="display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start">
-                <span v-for="s in poolSubnets" :key="s.id" class="ar-tag">
-                  {{ s.name }} · {{ s.cidr }} · {{ REGION.zones.find((z) => z.id === s.zone)?.name }}
-                </span>
+                <ArBadge v-for="s in poolSubnets" :key="s.id" variant="neutral" :text="`${s.name} · ${s.cidr} · ${REGION.zones.find((z) => z.id === s.zone)?.name}`" />
               </span>
             </div>
           </div>
@@ -216,16 +213,14 @@ const poolEvents = computed(() =>
             <div class="row">
               <span class="k" style="width: 120px">Labels</span>
               <span v-if="pool.labels?.length" class="v pool-meta">
-                <span v-for="l in pool.labels" :key="l" class="ar-tag mono">{{ l }}</span>
+                <ArBadge v-for="l in pool.labels" :key="l" variant="neutral" :text="l" />
               </span>
               <span v-else class="v muted">—</span>
             </div>
             <div class="row">
               <span class="k" style="width: 120px">Taints</span>
               <span v-if="pool.taints?.length" class="v pool-meta">
-                <span v-for="(t, i) in pool.taints" :key="'t' + i" class="ar-tag warning mono">
-                  <span class="dot"></span>{{ t.key }}{{ t.value ? '=' + t.value : '' }}:{{ t.effect }}
-                </span>
+                <ArBadge v-for="(t, i) in pool.taints" :key="'t' + i" variant="warning" prepend-icon="warning" :text="`${t.key}${t.value ? '=' + t.value : ''}:${t.effect}`" />
               </span>
               <span v-else class="v muted">—</span>
             </div>
@@ -244,7 +239,7 @@ const poolEvents = computed(() =>
           <tbody>
             <tr v-for="(e, i) in poolEvents" :key="i">
               <td class="mono muted">{{ e.ts }}</td>
-              <td><span class="ar-badge" :class="e.type === 'Warning' ? 'warning' : 'neutral'">{{ e.type === 'Warning' ? 'Warning' : 'Info' }}</span></td>
+              <td><ArBadge :variant="e.type === 'Warning' ? 'warning' : 'neutral'" :prepend-icon="e.type === 'Warning' ? 'warning' : ''" :text="e.type === 'Warning' ? 'Warning' : 'Info'" /></td>
               <td class="text-body-2">{{ e.reason }}</td>
               <td class="text-body-2 muted">{{ e.msg }}</td>
             </tr>

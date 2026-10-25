@@ -720,8 +720,6 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 }
 .zone-chip.off { opacity: .55; cursor: not-allowed; }
 .root-disk-box {
-  border: 1px solid var(--st-neutral-t1-5-default); border-radius: var(--radius-md);
-  padding: var(--space-4) var(--space-6);
   display: flex; align-items: center; gap: var(--space-4);
 }
 .root-disk-title { margin: 0; }

@@ -18,6 +18,7 @@ import { REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG, VPCS, VOLUME_PRICE_PER_GB, 
 import { genPoints, genTimes, seedHash } from '../metrics'
 import MetricsChart from '../components/ui/MetricsChart.vue'
 import ArDataTableServer from '../components/ui/ArDataTableServer.vue'
+import ArBadge from '../components/ui/ArBadge.vue'
 import ArButton from '../components/ui/ArButton.vue'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
@@ -36,6 +37,16 @@ const router = useRouter()
 const cluster = computed(() => store.getCluster(route.params.id))
 const vpc = computed(() => VPCS.find((v) => v.id === cluster.value?.vpcId))
 const cpPlan = computed(() => CP_PLANS.find((p) => p.id === cluster.value?.cp.plan))
+/* resource-ID style display: hash-like 24-hex string, stable per cluster */
+const clusterUid = computed(() => {
+  let h = seedHash(cluster.value?.id || '') >>> 0
+  let out = ''
+  for (let i = 0; i < 6; i++) {
+    h = (Math.imul(h, 16777619) ^ (h >>> 7)) >>> 0
+    out += h.toString(16).padStart(8, '0').slice(0, 4)
+  }
+  return out
+})
 
 /* Kubernetes events mock is defined here so the warning counter can use it */
 const K8S_EVENT_POOL = [
@@ -103,79 +114,87 @@ const resTotals = computed(() => {
   }
 })
 
-/* ---------------- overview: capacity planning (requested vs capacity) ----------------
-   Percent-of-node line charts don't support a decision. This does: how much
-   capacity running pods have already RESERVED (requests), what they actually
-   use, and when the reservation hits the cluster ceiling at the current
-   growth — i.e. "when do I need to add nodes", not "what does a line look like". */
-const CHART_COLORS = {
-  primary: 'var(--bg-primary-t3-1-default)',
-  green: 'var(--bg-success-t3-1-default)',
-  amber: 'var(--bg-warning-t1-1-default)',
-  blue: 'var(--bg-info-t3-1-default)',
-  gray: 'var(--fg-neutral-t1-3-default)',
-}
-const PERIOD_HOURS = { 'Last 1 hour': 1, 'Last 6 hours': 6, 'Last 24 hours': 24 }
-/* allocation = share of capacity already reserved (deterministic per cluster) */
-const ovAlloc = computed(() => {
-  const s = seedHash(cluster.value?.id || '')
-  const u = cluster.value?.usage || { cpu: 0, mem: 0 }
-  return { cpu: Math.min(96, Math.round(u.cpu + 26 + (s % 9))), mem: Math.min(96, Math.round(u.mem + 14 + (s % 11))) }
-})
-
-const PLAN_PERIODS = { 'Last 24 hours': 24, 'Last 7 days': 168, 'Last 30 days': 720 }
-const planRes = ref('cpu')
-const planPeriod = ref('Last 30 days')
-const planUnit = computed(() => (planRes.value === 'cpu' ? 'vCPU' : 'GiB'))
-/* day-grade tick labels for the multi-day windows */
-const planTimes = computed(() => {
-  const hours = PLAN_PERIODS[planPeriod.value] || 24
-  const times = genTimes(hours, 40)
-  if (hours <= 24) return times
-  return times.map((t, i) => (i % 5 === 0 ? t - 3600e3 * 12 : t))
-})
-
-const planData = computed(() => {
-  const id = cluster.value?.id || ''
-  const u = cluster.value?.usage || { cpu: 10, mem: 10 }
-  const isCpu = planRes.value === 'cpu'
-  const cap = isCpu ? resTotals.value.cores : resTotals.value.gib
-  const reqNow = ((isCpu ? ovAlloc.value.cpu : ovAlloc.value.mem) / 100) * cap
-  const usedNow = ((isCpu ? u.cpu : u.mem) / 100) * cap
-  const n = 40
-  const key = `${id}|plan|${planRes.value}|${planPeriod.value}`
-  /* weekly claim growth: deterministic per cluster+resource (0.4–2.4% of capacity) */
-  const h = (seedHash(key) % 1000) / 1000
-  const perWeek = cap * (0.004 + h * 0.02)
-  const hours = PLAN_PERIODS[planPeriod.value] || 24
-  const weeks = hours / 168
-  const drift = perWeek * weeks
-  const noiseReq = genPoints(key + '|req', { n, base: 0, variance: isCpu ? 0.5 : 1 })
-  const noiseUsed = genPoints(key + '|used', { n, base: 0, variance: isCpu ? 0.7 : 1.4 })
-  /* both curves end exactly at today's numbers and climb toward the present */
-  const requested = Array.from({ length: n }, (_, i) => {
-    const back = (n - 1 - i) / (n - 1)
-    return Math.max(0.2, reqNow - drift * back + noiseReq[i])
-  })
-  const used = Array.from({ length: n }, (_, i) => {
-    const back = (n - 1 - i) / (n - 1)
-    return Math.max(0.1, Math.min(requested[i] - cap * 0.005, usedNow - drift * 0.55 * back + noiseUsed[i]))
-  })
+/* ---------------- overview: resource usage (the SRE view) ----------------
+   Replaces the speculative "capacity planning" projection: what an operator
+   actually checks is utilization right now (CPU / Memory / Pods vs
+   allocatable) and live pressure signals (unschedulable pods, restart
+   loops, hottest node). Every signal links to where you act on it. */
+const resUsage = computed(() => {
+  const u = cluster.value?.usage || { cpu: 0, mem: 0, pods: 0 }
+  let podsCap = 0
+  for (const p of cluster.value?.pools || []) {
+    const fid = p.specs?.[0]?.flavorId || p.flavor
+    podsCap += (FLAVOR_CATALOG.find((x) => x.id === fid)?.maxPods || 32) * (p.count || 0)
+  }
   return {
-    cap,
-    reqNow,
-    usedNow,
-    free: Math.max(0, cap - reqNow),
-    drift,
-    growthPct: Math.round((drift / Math.max(0.1, reqNow - drift)) * 100),
-    runway: perWeek > 0 ? (cap - reqNow) / perWeek : null,
-    series: [
-      { label: 'Capacity', color: CHART_COLORS.gray, points: Array.from({ length: n }, () => cap) },
-      { label: 'Requested', color: CHART_COLORS.blue, points: requested },
-      { label: 'Used', color: CHART_COLORS.primary, points: used },
-    ],
+    cpu: { pct: u.cpu, used: resTotals.value.usedCores, cap: resTotals.value.cores, unit: 'vCPU' },
+    mem: { pct: u.mem, used: resTotals.value.usedGib, cap: resTotals.value.gib, unit: 'GB' },
+    pods: { pct: podsCap ? Math.round((u.pods / podsCap) * 100) : 0, used: u.pods, cap: podsCap, unit: 'pods' },
   }
 })
+function ruToneClass(pct) {
+  return pct > 85 ? 'danger' : pct >= 70 ? 'warn' : ''
+}
+/* pressure signals, derived from the same event data the Events section shows */
+const ruSignals = computed(() => {
+  const sig = []
+  const failed = K8S_EVENT_POOL.filter((e) => e.name === 'FailedScheduling')
+  if (failed.length) {
+    sig.push({
+      key: 'unschedulable',
+      tone: 'warning',
+      icon: 'warning',
+      label: `${failed.length} pods unschedulable`,
+      detail: `FailedScheduling — ${failed.map((f) => f.obj.replace('...', '')).join(', ')}: ${failed[0].msg}`,
+      action: 'events',
+    })
+  }
+  const backoff = K8S_EVENT_POOL.filter((e) => e.name === 'BackOff')
+  if (backoff.length) {
+    sig.push({
+      key: 'restart-loop',
+      tone: 'warning',
+      icon: 'refresh',
+      label: `${backoff.length} container in restart loop`,
+      detail: `BackOff — ${backoff[0].obj}: ${backoff[0].msg}`,
+      action: 'events',
+    })
+  }
+  let hot = null
+  for (const p of cluster.value?.pools || []) {
+    for (const n of nodesOf(p)) {
+      if (!hot || n.cpu > hot.cpu) hot = { ...n, pool: p.name, poolId: p.id }
+    }
+  }
+  if (hot) {
+    sig.push(
+      hot.cpu >= 80
+        ? {
+            key: 'hot-node',
+            tone: 'warning',
+            icon: 'warning',
+            label: `Node ${hot.name} at ${hot.cpu}% CPU`,
+            detail: `Busiest node in ${hot.pool} — check per-node load before adding pods here.`,
+            action: 'pool',
+            poolId: hot.poolId,
+          }
+        : {
+            key: 'hot-node',
+            tone: 'success',
+            icon: 'check-circle',
+            label: 'Node headroom OK',
+            detail: `Busiest node is ${hot.name} (${hot.pool}) at ${hot.cpu}% CPU.`,
+            action: 'pool',
+            poolId: hot.poolId,
+          }
+    )
+  }
+  return sig
+})
+function ruSignalAction(s) {
+  if (s.action === 'events') tab.value = 'events'
+  else if (s.action === 'pool') router.push({ name: 'pool-details', params: { id: cluster.value.id, poolId: s.poolId } })
+}
 
 /* ---------------- control plane health (overview) ---------------- */
 /* Health strip shows the at-a-glance signal; the full replica table with the
@@ -334,6 +353,7 @@ const monLevel = computed(() => {
   return { cpu: 6 + h * 8, mem: 24 + h * 10, load: 0.12 + h * 0.15, disk: 6.5 + h * 3, io: 3 + h * 6 }
 })
 
+const PERIOD_HOURS = { 'Last 1 hour': 1, 'Last 6 hours': 6, 'Last 24 hours': 24 }
 const monTimes = computed(() => genTimes(PERIOD_HOURS[monPeriod.value] || 1, 40))
 
 /* band helper: max/min hug the avg line */
@@ -698,7 +718,7 @@ function menuAction(item) {
         <div class="title-row">
           <h1 class="text-title-2" style="margin: 0">{{ cluster.name }}</h1>
           <ClusterStatus :status="cluster.status" />
-          <span class="ar-badge neutral pill">v{{ cluster.version }}</span>
+          <ArBadge variant="neutral" :text="`v${cluster.version}`" />
         </div>
         <div class="meta">
           <span class="text-body-2 muted">created {{ fmtDate(cluster.createdAt) }}</span>
@@ -755,7 +775,11 @@ function menuAction(item) {
                 <div class="health-seg">
                   <span class="health-label text-caption-1">Control plane</span>
                   <div class="health-line">
-                    <span class="ar-tag" :class="cpHealthy ? 'success' : 'error'"><span class="dot"></span>{{ cpHealthy ? 'Healthy' : 'Degraded' }}</span>
+                    <ArBadge
+                      :variant="cpHealthy ? 'success' : 'danger'"
+                      :prepend-icon="cpHealthy ? 'check-circle' : 'error'"
+                      :text="cpHealthy ? 'Healthy' : 'Degraded'"
+                    />
                     <span class="cp-chips">
                       <span
                         v-for="m in masterNodes"
@@ -783,7 +807,7 @@ function menuAction(item) {
                   <span class="health-label text-caption-1">Version</span>
                   <div class="health-line">
                     <span class="health-big">v{{ cluster.version }}</span>
-                    <span class="ar-badge pill" :class="verBadgeTone">{{ verBadge }}</span>
+                    <ArBadge :variant="verBadgeTone" :prepend-icon="verBadgeTone === 'success' ? 'check-circle' : verBadgeTone === 'info' ? 'refresh' : 'warning'" :text="verBadge" />
                   </div>
                   <span v-if="verBadge === 'Update available'" class="text-caption-1 muted">
                     v{{ upgradeTarget.patch }} is ready. Upgrades are manual and take 15–40 minutes —
@@ -798,15 +822,15 @@ function menuAction(item) {
                 <div class="kv about-grid">
                   <div class="row">
                     <span class="k">Cluster ID</span>
-                    <span class="v mono about-id" :title="cluster.id">{{ cluster.id }}</span>
-                    <button class="ar-btn ghost icon sm" title="Copy cluster ID" aria-label="Copy cluster ID" @click="copy(cluster.id)">
+                    <span class="v mono about-id" :title="clusterUid">{{ clusterUid }}</span>
+                    <button class="ar-btn ghost icon sm" title="Copy cluster ID" aria-label="Copy cluster ID" @click="copy(clusterUid)">
                       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>
                     </button>
                   </div>
                   <div class="row">
                     <span class="k">Plan</span>
                     <span class="v">
-                      <span class="ar-badge primary pill">AKS {{ cpPlan?.name }}</span>
+                      <ArBadge variant="primary" :text="`AKS ${cpPlan?.name}`" />
                       <span class="text-body-2 muted" style="margin-inline-start: var(--space-2)">{{ cluster.cp.ha ? 'HA' : 'Single zone' }}</span>
                     </span>
                   </div>
@@ -825,13 +849,9 @@ function menuAction(item) {
                   <div class="row">
                     <span class="k">Tags</span>
                     <span class="v" style="display: flex; flex-wrap: wrap; gap: var(--space-1)">
-                      <span v-for="l in cluster.labels" :key="l" class="ar-tag mono" style="font-size: 11px">{{ l }}</span>
+                      <ArBadge v-for="l in cluster.labels" :key="l" variant="neutral" :text="l" />
                       <span v-if="!cluster.labels.length" class="text-body-2 muted">—</span>
                     </span>
-                  </div>
-                  <div class="row about-wide">
-                    <span class="k">Description</span>
-                    <span class="v text-body-2">{{ cluster.description || '—' }}</span>
                   </div>
                 </div>
                 <button class="link-btn" style="margin-top: var(--space-3)" @click="tab = 'networking'">Network settings</button>
@@ -865,48 +885,36 @@ function menuAction(item) {
                 </ArDataTableServer>
               </div>
 
-              <!-- 4 · capacity planning: when do I need to add nodes? -->
+              <!-- 4 · resource usage: utilization + live pressure signals (the SRE view) -->
               <div class="ar-card" style="padding: var(--space-6)">
                 <div class="card-head-row">
                   <div>
-                    <h3 class="text-title-3" style="margin: 0">Capacity planning</h3>
-                    <p class="text-body-2 muted" style="margin: 2px 0 0">How fast running pods are claiming the cluster's headroom — and when it runs out.</p>
+                    <h3 class="text-title-3" style="margin: 0">Resource usage</h3>
+                    <p class="text-body-2 muted" style="margin: 2px 0 0">Worker-node utilization and scheduling pressure, right now.</p>
                   </div>
-                  <div style="display: flex; gap: var(--space-2); align-items: center">
-                    <div class="seg" role="group" aria-label="Resource">
-                      <button :class="{ on: planRes === 'cpu' }" @click="planRes = 'cpu'">CPU</button>
-                      <button :class="{ on: planRes === 'mem' }" @click="planRes = 'mem'">Memory</button>
-                    </div>
-                    <ArSelect v-model="planPeriod" style="width: 150px" :options="Object.keys(PLAN_PERIODS)" aria-label="Select Period" />
+                  <button class="link-btn" @click="tab = 'monitoring'">Detailed metrics</button>
+                </div>
+
+                <div class="ru-grid">
+                  <div v-for="(r, key) in { cpu: resUsage.cpu, mem: resUsage.mem, pods: resUsage.pods }" :key="key" class="ru-meter">
+                    <span class="text-caption-1">{{ key === 'cpu' ? 'CPU' : key === 'mem' ? 'Memory' : 'Pods' }}</span>
+                    <span class="ru-big" :class="ruToneClass(r.pct)">
+                      {{ key === 'pods' ? r.used : r.used.toFixed(1) }}
+                      <em>of {{ r.cap }} {{ r.unit === 'pods' ? '' : r.unit }}</em>
+                    </span>
+                    <ArProgress :value="r.pct" :label="`${r.pct}%`" />
                   </div>
                 </div>
 
-                <MetricsChart :title="planRes === 'cpu' ? 'CPU' : 'Memory'" :unit="planUnit" :series="planData.series" :times="planTimes" />
-
-                <div class="plan-stats">
-                  <div class="plan-stat">
-                    <span class="text-caption-1 muted">Free to schedule</span>
-                    <span class="plan-big">{{ planData.free.toFixed(1) }} {{ planUnit }}</span>
-                    <div class="plan-bar" :title="`Used ${planData.usedNow.toFixed(1)} · Requested ${planData.reqNow.toFixed(1)} · Capacity ${planData.cap}`">
-                      <span class="pb-used" :style="{ width: (planData.usedNow / planData.cap) * 100 + '%' }"></span>
-                      <span class="pb-req" :style="{ width: ((planData.reqNow - planData.usedNow) / planData.cap) * 100 + '%' }"></span>
-                    </div>
-                    <span class="text-caption-1 muted">of {{ planData.cap }} {{ planUnit }} total · used {{ planData.usedNow.toFixed(1) }}</span>
-                  </div>
-                  <div class="plan-stat">
-                    <span class="text-caption-1 muted">Growth · {{ planPeriod.replace('Last ', '') }}</span>
-                    <span class="plan-big">+{{ (planData.drift).toFixed(1) }} {{ planUnit }}</span>
-                    <span class="text-caption-1 muted">requests grew ~{{ planData.growthPct }}% in this window</span>
-                  </div>
-                  <div class="plan-stat">
-                    <span class="text-caption-1 muted">Time to full</span>
-                    <span class="plan-big" :class="{ alert: planData.runway < 8 }">≈ {{ Math.round(planData.runway) }} weeks</span>
-                    <span class="text-caption-1 muted">until requests reach capacity — add a pool before then</span>
+                <div class="ru-signals">
+                  <div v-for="s in ruSignals" :key="s.key" class="ru-signal">
+                    <ArBadge :variant="s.tone" :prepend-icon="s.icon" :text="s.label" />
+                    <span class="text-body-2 muted ru-detail">{{ s.detail }}</span>
+                    <button class="link-btn" @click="ruSignalAction(s)">
+                      {{ s.action === 'events' ? 'View events' : 'Open pool' }}
+                    </button>
                   </div>
                 </div>
-                <p class="text-caption-1 muted" style="margin: var(--space-3) 0 0">
-                  Requested = resources running pods have reserved (what the scheduler promises them). Used = what nodes actually report. Plan node additions before Requested meets Capacity.
-                </p>
               </div>
 
               <!-- 5 · O&M events: the real event list with the Events section filters -->
@@ -955,7 +963,7 @@ function menuAction(item) {
                     <span class="mono muted">{{ item.generated }}</span>
                   </template>
                   <template #item-level="{ item }">
-                    <span class="ar-badge" :class="item.level === 'Warning' ? 'warning' : 'neutral'">{{ item.level }}</span>
+                    <ArBadge :variant="item.level === 'Warning' ? 'warning' : 'neutral'" :prepend-icon="item.level === 'Warning' ? 'warning' : ''" :text="item.level" />
                   </template>
                   <template #item-name="{ item }">
                     <span class="text-body-2-strong">{{ item.name }}</span>
@@ -986,19 +994,19 @@ function menuAction(item) {
                   <table class="ar-table">
                     <thead>
                       <tr>
-                        <th>Name <span class="sort-ico">⇅</span></th>
-                        <th style="width: 120px">Status</th>
-                        <th style="width: 80px">AZ</th>
-                        <th style="width: 170px">CPU Usage</th>
-                        <th style="width: 170px">Memory Usage</th>
-                        <th style="width: 80px"></th>
+                        <th style="width: 26%">Name <span class="sort-ico">⇅</span></th>
+                        <th style="width: 13%">Status</th>
+                        <th style="width: 10%">AZ</th>
+                        <th style="width: 19%">CPU Usage</th>
+                        <th style="width: 19%">Memory Usage</th>
+                        <th style="width: 13%"></th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr v-for="m in masterNodes" :key="m.name">
                         <td class="cell-main">{{ m.name }}</td>
                         <td>
-                          <span class="ar-tag" :class="m.status === 'Running' ? 'success' : 'error'"><span class="dot"></span>{{ m.status }}</span>
+                          <ArBadge :variant="m.status === 'Running' ? 'success' : 'danger'" :prepend-icon="m.status === 'Running' ? 'check-circle' : 'error'" :text="m.status" />
                         </td>
                         <td class="text-body-2 muted">{{ m.az }}</td>
                         <td><ArProgress :value="m.cpu" :label="m.cpu.toFixed(2) + ' %'" /></td>
@@ -1045,10 +1053,13 @@ function menuAction(item) {
                   · {{ fmtIRR(poolCost(pool)) }} IRR / month
                 </div>
                 <div v-if="(pool.labels?.length || pool.taints?.length)" class="pool-meta" style="margin-top: var(--space-2)">
-                  <span v-for="l in pool.labels || []" :key="l" class="ar-tag mono" style="font-size: 11px">{{ l }}</span>
-                  <span v-for="(t, i) in pool.taints || []" :key="'t' + i" class="ar-tag warning mono" style="font-size: 11px">
-                    <span class="dot"></span>{{ t.key }}{{ t.value ? '=' + t.value : '' }}:{{ t.effect }}
-                  </span>
+                  <ArBadge v-for="l in pool.labels || []" :key="l" variant="neutral" :text="l" />
+                  <ArBadge
+                    v-for="(t, i) in pool.taints || []"
+                    :key="'t' + i"
+                    variant="warning"
+                    :text="`${t.key}${t.value ? '=' + t.value : ''}:${t.effect}`"
+                  />
                 </div>
               </div>
               <div style="display: flex; align-items: center; gap: var(--space-2)">
@@ -1065,7 +1076,7 @@ function menuAction(item) {
                   <tr v-for="n in nodesOf(pool)" :key="n.name">
                     <td class="mono">{{ n.name }}</td>
                     <td>
-                      <span class="ar-tag" :class="n.ready ? 'success' : 'error'"><span class="dot"></span>{{ n.ready ? 'Ready' : 'NotReady' }}</span>
+                      <ArBadge :variant="n.ready ? 'success' : 'danger'" :prepend-icon="n.ready ? 'check-circle' : 'error'" :text="n.ready ? 'Ready' : 'NotReady'" />
                     </td>
                     <td class="text-body-2 muted">{{ flavorName(n.flavor) }}</td>
                     <td class="text-body-2 muted">{{ REGION.zones.find((z) => z.id === n.zone)?.name }}</td>
@@ -1136,7 +1147,7 @@ function menuAction(item) {
                 <h3 class="text-title-3" style="margin: 0">Control-plane backups</h3>
                 <p class="text-body-2 muted" style="margin: 2px 0 0">Daily etcd snapshots with cross-AZ replication. Always on.</p>
               </div>
-              <span class="ar-badge success pill">{{ cluster.etcdBackup.restorePoints }} restore points</span>
+              <ArBadge variant="success" prepend-icon="check-circle" :text="`${cluster.etcdBackup.restorePoints} restore points`" />
             </div>
             <div class="kv">
               <div class="row"><span class="k" style="width: 120px">Schedule</span><span class="v">Daily at 02:00 (ir-tz)</span></div>
@@ -1155,10 +1166,13 @@ function menuAction(item) {
                 <div class="row"><span class="k" style="width: 120px">VPC</span><span class="v">{{ vpc?.name }} <span class="mono muted">({{ vpc?.cidr }})</span></span></div>
                 <div class="row">
                   <span class="k" style="width: 120px">Subnets</span>
-                  <span class="v" style="display: flex; flex-direction: column; gap: var(--space-2)">
-                    <span v-for="sid in cluster.subnetIds" :key="sid" class="ar-tag">
-                      {{ vpc?.subnets.find((s) => s.id === sid)?.name }} · {{ vpc?.subnets.find((s) => s.id === sid)?.cidr }} · {{ REGION.zones.find((z) => z.id === vpc?.subnets.find((s) => s.id === sid)?.zone)?.name }}
-                    </span>
+                  <span class="v" style="display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start">
+                    <ArBadge
+                      v-for="sid in cluster.subnetIds"
+                      :key="sid"
+                      variant="neutral"
+                      :text="`${vpc?.subnets.find((s) => s.id === sid)?.name} · ${vpc?.subnets.find((s) => s.id === sid)?.cidr} · ${REGION.zones.find((z) => z.id === vpc?.subnets.find((s) => s.id === sid)?.zone)?.name}`"
+                    />
                   </span>
                 </div>
               </div>
@@ -1176,7 +1190,7 @@ function menuAction(item) {
             <div class="ar-card" style="padding: var(--space-6)">
               <h3 class="text-title-3" style="margin: 0 0 var(--space-4)">API server access</h3>
               <div class="kv">
-                <div class="row"><span class="k" style="width: 120px">Access</span><span class="v"><span class="ar-badge success pill">Public</span></span></div>
+                <div class="row"><span class="k" style="width: 120px">Access</span><span class="v"><ArBadge variant="success" prepend-icon="check-circle" text="Public" /></span></div>
                 <div class="row"><span class="k" style="width: 120px">Endpoint</span><span class="v mono" style="font-size: 12px; display: flex; align-items: center; gap: var(--space-2)">
                   {{ apiEndpoint(cluster) }}
                   <button class="ar-btn ghost icon sm" title="Copy" @click="copy(apiEndpoint(cluster))">
@@ -1257,7 +1271,7 @@ function menuAction(item) {
                   <h3 class="text-title-3" style="margin: 0">Control-plane backups</h3>
                   <p class="text-body-2 muted" style="margin: 2px 0 0">Daily etcd snapshots with cross-AZ replication. Always on.</p>
                 </div>
-                <span class="ar-badge success pill">{{ cluster.etcdBackup.restorePoints }} restore points</span>
+                <ArBadge variant="success" prepend-icon="check-circle" :text="`${cluster.etcdBackup.restorePoints} restore points`" />
               </div>
               <div class="kv">
                 <div class="row"><span class="k" style="width: 120px">Schedule</span><span class="v">Daily at 02:00 (ir-tz)</span></div>
@@ -1272,7 +1286,7 @@ function menuAction(item) {
                   <h3 class="text-title-3" style="margin: 0">Audit logs</h3>
                   <p class="text-body-2 muted" style="margin: 2px 0 0">API-server and platform actions streamed to Cloud Logs.</p>
                 </div>
-                <span class="ar-badge" :class="cluster.auditLogs ? 'success' : 'neutral'">{{ cluster.auditLogs ? 'Streaming' : 'Off' }}</span>
+                <ArBadge :variant="cluster.auditLogs ? 'success' : 'neutral'" :prepend-icon="cluster.auditLogs ? 'check-circle' : ''" :text="cluster.auditLogs ? 'Streaming' : 'Off'" />
               </div>
               <p class="text-caption-1 muted" style="margin: var(--space-3) 0 0">Audit log delivery is managed with your Cloud Logs project — see the Cloud Logs console.</p>
             </div>
@@ -1365,7 +1379,7 @@ function menuAction(item) {
                 <tbody>
                   <tr v-for="(e, i) in omEvents" :key="i">
                     <td class="mono muted">{{ e.generated }}</td>
-                    <td><span class="ar-badge" :class="e.level === 'Warning' ? 'warning' : 'neutral'">{{ e.level }}</span></td>
+                    <td><ArBadge :variant="e.level === 'Warning' ? 'warning' : 'neutral'" :prepend-icon="e.level === 'Warning' ? 'warning' : ''" :text="e.level" /></td>
                     <td class="text-body-2-strong">{{ e.name }}</td>
                     <td class="text-body-2 muted">{{ e.remarks }}</td>
                     <td class="text-body-2" :class="e.error === '—' ? 'muted' : ''">{{ e.error }}</td>
@@ -1396,9 +1410,7 @@ function menuAction(item) {
                       <div class="cell-sub mono">{{ e.obj }}</div>
                     </td>
                     <td>
-                      <span class="ar-tag" :class="e.type === 'Alarm' ? 'warning' : 'success'">
-                        <span class="dot"></span>{{ e.type }}
-                      </span>
+                      <ArBadge :variant="e.type === 'Alarm' ? 'warning' : 'success'" :prepend-icon="e.type === 'Alarm' ? 'warning' : 'check-circle'" :text="e.type" />
                     </td>
                     <td class="text-body-2-strong">{{ e.name }}</td>
                     <td class="text-body-2 muted">{{ e.msg }}</td>
@@ -1419,7 +1431,7 @@ function menuAction(item) {
     </div>
 
     <!-- ================= NODE MONITORING PANEL ================= -->
-    <ArSidePanel :open="monitorPanel" :title="`Node Monitoring ${monitorNode?.name || ''}`" :subtitle="`${cluster?.name} · ${monitorNode?.az || ''}`" @close="monitorPanel = false">
+    <ArSidePanel :open="monitorPanel" size="md" :title="`Node Monitoring ${monitorNode?.name || ''}`" :subtitle="`${cluster?.name} · ${monitorNode?.az || ''}`" @close="monitorPanel = false">
       <div class="banner info" style="align-items: flex-start">
         <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
         <span>Monitoring data is collected by the platform metrics agent. Data missing at any time point indicates that no data was reported.</span>
@@ -1537,12 +1549,12 @@ function menuAction(item) {
       <div class="ar-field">
         <label>Node labels</label>
         <div class="tagbox">
-          <span v-for="l in poolForm.labels" :key="l" class="ar-tag mono" style="font-size: 11px">
+          <ArBadge v-for="l in poolForm.labels" :key="l" variant="neutral">
             {{ l }}
             <button class="tag-x" aria-label="Remove label" @click="removePoolLabel(l)">
               <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
             </button>
-          </span>
+          </ArBadge>
           <input v-model="poolLabelInput" placeholder="key=value" spellcheck="false" @input="poolLabelError = ''" @keydown="onPoolLabelKeydown" />
         </div>
         <span v-if="poolLabelError" class="error-text">{{ poolLabelError }}</span>
@@ -1761,48 +1773,34 @@ function menuAction(item) {
 }
 .cp-chip.down { background: var(--bg-error-t2-1-default); color: var(--fg-error-t2-1-default); }
 
-/* capacity planning: segmented resource toggle + stat row under the chart */
-.seg {
-  display: inline-flex;
-  border: 1px solid var(--st-neutral-t1-5-default);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-.seg button {
-  border: 0;
-  background: none;
-  padding: 6px 14px;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--fg-neutral-t1-2-default);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.seg button + button { border-left: 1px solid var(--st-neutral-t1-5-default); }
-.seg button.on { background: var(--bg-primary-t2-1-default); color: var(--fg-primary-t1-1-default); }
-.plan-stats {
+/* resource usage (overview): utilization meters + pressure signals */
+.ru-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--space-6);
-  padding-top: var(--space-4);
+  margin-top: var(--space-4);
+}
+.ru-meter { display: flex; flex-direction: column; gap: var(--space-1); }
+.ru-big {
+  font-size: 22px;
+  font-weight: 450;
+  letter-spacing: -0.4px;
+  color: var(--fg-neutral-t1-1-default);
+  line-height: 1.2;
+}
+.ru-big em { font-style: normal; font-size: 13px; font-weight: 400; color: var(--fg-neutral-t1-3-default); letter-spacing: 0; }
+.ru-big.warn { color: var(--fg-warning-t1-1-default); }
+.ru-big.danger { color: var(--fg-error-t1-1-default); }
+.ru-signals {
   border-top: 1px solid var(--st-neutral-t1-5-default);
-  margin-top: var(--space-2);
-}
-.plan-stat { display: flex; flex-direction: column; gap: var(--space-1); }
-.plan-big { font-size: 22px; font-weight: 450; letter-spacing: -0.4px; color: var(--fg-neutral-t1-1-default); line-height: 1.2; }
-.plan-big.alert { color: var(--fg-warning-t1-1-default); }
-/* used / requested / free share of capacity, one stacked bar */
-.plan-bar {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
   display: flex;
-  height: 8px;
-  border-radius: var(--radius-circular);
-  overflow: hidden;
-  background: var(--bg-neutral-t1-4-default);
-  margin: var(--space-1) 0;
+  flex-direction: column;
+  gap: var(--space-3);
 }
-.pb-used { background: var(--bg-primary-t3-1-default); }
-.pb-req { background: var(--bg-info-t3-1-default); }
+.ru-signal { display: flex; align-items: center; gap: var(--space-3); }
+.ru-signal .ru-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* usage trends: two charts side by side */
 .mon-grid {
@@ -1840,6 +1838,6 @@ function menuAction(item) {
   .health-seg + .health-seg { border-left: 0; border-top: 1px solid var(--st-neutral-t1-5-default); }
   .about-grid { grid-template-columns: 1fr; }
   .mon-grid { grid-template-columns: 1fr; }
-  .plan-stats { grid-template-columns: 1fr; }
+  .ru-grid { grid-template-columns: 1fr; }
 }
 </style>

@@ -5,6 +5,7 @@ import { store } from '../store'
 import { FLAVOR_CATALOG, VOLUME_PRICE_PER_GB, fmtIRR } from '../data'
 import ActionMenu from './ui/ActionMenu.vue'
 import ArModal from './ui/ArModal.vue'
+import ArBadge from './ui/ArBadge.vue'
 import ArButton from './ui/ArButton.vue'
 
 /*
@@ -196,12 +197,12 @@ function onSelect(item) {
     <div class="ar-field" style="margin: 0">
       <label>Node labels</label>
       <div class="tagbox">
-        <span v-for="l in labelsForm.list" :key="l" class="ar-tag mono" style="font-size: 11px">
+        <ArBadge v-for="l in labelsForm.list" :key="l" variant="neutral">
           {{ l }}
           <button class="tag-x" aria-label="Remove label" @click="removeLabel(l)">
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
           </button>
-        </span>
+        </ArBadge>
         <input v-model="labelsForm.input" placeholder="key=value" spellcheck="false" @keydown.enter.prevent="addLabel" />
       </div>
       <span v-if="labelsForm.list.length && !labelsOk" class="error-text">Use key=value — lowercase keys (letters, digits, -, .), values up to 63 characters.</span>

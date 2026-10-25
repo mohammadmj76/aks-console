@@ -5,6 +5,11 @@ const props = defineProps({
   open: Boolean,
   title: String,
   subtitle: String,
+  size: {
+    type: String,
+    default: 'sm',
+    validator: (v) => ['sm', 'md'].includes(v),
+  },
 })
 const emit = defineEmits(['close'])
 
@@ -19,7 +24,7 @@ watch(
 <template>
   <Teleport to="body">
     <div class="overlay" :class="{ open }" @click="emit('close')" />
-    <aside class="side-panel" :class="{ open }" :aria-label="title">
+    <aside class="side-panel" :class="[{ open }, size !== 'sm' && `side-panel--${size}`]" :aria-label="title">
       <header>
         <div>
           <h2 class="text-title-3" style="margin: 0">{{ title }}</h2>
