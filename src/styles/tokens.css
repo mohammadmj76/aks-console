@@ -247,5 +247,7 @@
   --shadow-md: 0 12px 16px -4px rgba(16,24,40,.10);
 
   /* ===== typography ===== */
-  --font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* same stack as the real panel uikit ($_font-family-ltr in _text-styles.module.scss):
+     Inter first for Latin, Yekan Bakh as the Persian fallback */
+  --font: "Inter", "Yekan Bakh", Arial, Helvetica, sans-serif;
 }

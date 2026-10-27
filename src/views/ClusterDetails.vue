@@ -960,11 +960,6 @@ function menuAction(item) {
 
     <!-- ================= NODE MONITORING PANEL ================= -->
     <ArSidePanel :open="monitorPanel" size="md" :title="`Node Monitoring ${monitorNode?.name || ''}`" :subtitle="`${cluster?.name} · ${monitorNode?.az || ''}`" @close="monitorPanel = false">
-      <div class="banner info" style="align-items: flex-start">
-        <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
-        <span>Monitoring data is collected by the platform metrics agent. Data missing at any time point indicates that no data was reported.</span>
-      </div>
-
       <div v-if="monitorNode">
         <h3 class="text-title-3" style="margin: 0 0 var(--space-4)">Monitoring Overview</h3>
         <div class="charts-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 0">
@@ -979,12 +974,12 @@ function menuAction(item) {
           </div>
           <!-- Memory gauge -->
           <div class="ar-card" style="padding: var(--space-5)">
-            <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Physical Memory Usage</h4>
+            <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Memory Usage</h4>
             <div class="gauge-pair">
               <div><div class="gauge-num">{{ monitorMetrics(monitorNode).memUsed }}</div><div class="text-caption-1 muted">GiB · Available</div></div>
               <div><div class="gauge-num">{{ monitorMetrics(monitorNode).memLimit }}</div><div class="text-caption-1 muted">GiB · Limit</div></div>
             </div>
-            <DonutGauge :pct="monitorNode.mem" label="Physical Memory Usage" />
+            <DonutGauge :pct="monitorNode.mem" label="Memory Usage" />
           </div>
           <!-- Uplink / Downlink -->
           <div class="ar-card" style="padding: var(--space-5)">

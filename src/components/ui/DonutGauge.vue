@@ -21,7 +21,7 @@ const dash = computed(() => `${Math.min(100, Math.max(0, props.pct))} ${100 - Ma
       />
     </svg>
     <div class="dg-center">
-      <div class="dg-pct">{{ pct }}%</div>
+      <div class="dg-pct">{{ pct }}</div>
       <div class="dg-label muted">{{ label }}</div>
     </div>
   </div>

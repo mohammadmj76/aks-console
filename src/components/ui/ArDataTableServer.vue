@@ -198,8 +198,6 @@ function onClickSort(col) {
     gap: var(--space-4);
     padding: var(--space-5) var(--space-6);
     background: var(--bg-neutral-t1-1-default);
-    border: 1px solid var(--st-neutral-t1-4-default);
-    border-radius: var(--radius-md);
 }
 .ArDataTableServer__header {
     display: flex;

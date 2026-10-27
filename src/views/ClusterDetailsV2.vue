@@ -67,17 +67,32 @@ const warningCount = computed(() => {
 })
 
 /* ---------------- left section nav (groups mirror the CCE sidebar) ---------------- */
+/* section nav as collapsible groups — mirrors the real console aside menu
+   (chevron + label rows like "Server" / "Network"), same texts as before */
+const NAV_GROUPS = [
+  {
+    label: 'Resources',
+    items: [
+      { id: 'pools', label: 'Node Pools', count: computed(() => cluster.value?.pools.length || 0) },
+      { id: 'storage', label: 'Storage' },
+    ],
+  },
+  {
+    label: 'Cluster',
+    items: [
+      { id: 'networking', label: 'Networking' },
+      { id: 'monitoring', label: 'Monitoring' },
+      { id: 'operations', label: 'Operations' },
+      { id: 'events', label: 'Events', warn: true },
+    ],
+  },
+]
 const sections = [
   { id: 'overview', label: 'Overview' },
-  { group: 'Resources' },
-  { id: 'pools', label: 'Node Pools', count: computed(() => cluster.value?.pools.length || 0) },
-  { id: 'storage', label: 'Storage' },
-  { group: 'Cluster' },
-  { id: 'networking', label: 'Networking' },
-  { id: 'monitoring', label: 'Monitoring' },
-  { id: 'operations', label: 'Operations' },
-  { id: 'events', label: 'Events', warn: true },
+  ...NAV_GROUPS.flatMap((g) => g.items),
 ]
+const openGroups = reactive({ Resources: true, Cluster: true })
+const toggleGroup = (label) => { openGroups[label] = !openGroups[label] }
 /* section lives in the URL (?tab=pools) — same key as variant A so the
    cluster-list deep links (?tab=pools&add=pool) work for both variants */
 const tab = ref(sections.some((s) => s.id && s.id === route.query.tab) ? route.query.tab : 'overview')
@@ -91,110 +106,72 @@ watch(
   }
 )
 
-/* ---------------- overview: resource summary (CPU / Memory tiles) ---------------- */
-/* worker capacity derived from pool flavors; usage % comes from the mock store */
-const resTotals = computed(() => {
-  let cores = 0
-  let gib = 0
-  for (const p of cluster.value?.pools || []) {
-    const fid = p.specs?.[0]?.flavorId || p.flavor
-    const f = FLAVOR_CATALOG.find((x) => x.id === fid)
-    if (!f) continue
-    cores += f.vcpu * (p.count || 0)
-    gib += f.ram * (p.count || 0)
-  }
-  const u = cluster.value?.usage || { cpu: 0, mem: 0 }
-  return {
-    cores,
-    gib,
-    usedCores: Math.round(cores * u.cpu) / 100,
-    usedGib: Math.round(gib * u.mem) / 100,
-    cpuPct: u.cpu,
-    memPct: u.mem,
-  }
-})
-
-/* ---------------- overview: resource usage (the SRE view) ----------------
-   Replaces the speculative "capacity planning" projection: what an operator
-   actually checks is utilization right now (CPU / Memory / Pods vs
-   allocatable) and live pressure signals (unschedulable pods, restart
-   loops, hottest node). Every signal links to where you act on it. */
-const resUsage = computed(() => {
-  const u = cluster.value?.usage || { cpu: 0, mem: 0, pods: 0 }
-  let podsCap = 0
-  for (const p of cluster.value?.pools || []) {
-    const fid = p.specs?.[0]?.flavorId || p.flavor
-    podsCap += (FLAVOR_CATALOG.find((x) => x.id === fid)?.maxPods || 32) * (p.count || 0)
-  }
-  return {
-    cpu: { pct: u.cpu, used: resTotals.value.usedCores, cap: resTotals.value.cores, unit: 'vCPU' },
-    mem: { pct: u.mem, used: resTotals.value.usedGib, cap: resTotals.value.gib, unit: 'GB' },
-    pods: { pct: podsCap ? Math.round((u.pods / podsCap) * 100) : 0, used: u.pods, cap: podsCap, unit: 'pods' },
-  }
-})
-function ruToneClass(pct) {
-  return pct > 85 ? 'danger' : pct >= 70 ? 'warn' : ''
+/* ---------------- overview: monitoring overview (cluster-wide charts) ----------------
+   Mirrors the real panel's Monitoring Overview block: CPU %, Memory %,
+   uplink and downlink rates over the selected window. Averages across all
+   worker nodes derive from cluster.usage; the trend is what tells you
+   whether you are heading for a scaling decision. */
+const CHART_COLORS = {
+  primary: 'var(--bg-primary-t3-1-default)',
+  green: 'var(--bg-success-t3-1-default)',
+  amber: 'var(--bg-warning-t1-1-default)',
+  blue: 'var(--bg-info-t3-1-default)',
+  violet: 'var(--fg-violet-t1-1-default)',
 }
-/* pressure signals, derived from the same event data the Events section shows */
-const ruSignals = computed(() => {
-  const sig = []
-  const failed = K8S_EVENT_POOL.filter((e) => e.name === 'FailedScheduling')
-  if (failed.length) {
-    sig.push({
-      key: 'unschedulable',
-      tone: 'warning',
-      icon: 'warning',
-      label: `${failed.length} pods unschedulable`,
-      detail: `FailedScheduling — ${failed.map((f) => f.obj.replace('...', '')).join(', ')}: ${failed[0].msg}`,
-      action: 'events',
-    })
-  }
-  const backoff = K8S_EVENT_POOL.filter((e) => e.name === 'BackOff')
-  if (backoff.length) {
-    sig.push({
-      key: 'restart-loop',
-      tone: 'warning',
-      icon: 'refresh',
-      label: `${backoff.length} container in restart loop`,
-      detail: `BackOff — ${backoff[0].obj}: ${backoff[0].msg}`,
-      action: 'events',
-    })
-  }
-  let hot = null
-  for (const p of cluster.value?.pools || []) {
-    for (const n of nodesOf(p)) {
-      if (!hot || n.cpu > hot.cpu) hot = { ...n, pool: p.name, poolId: p.id }
+const ovPeriod = ref('Last 6 hours')
+const ovTimes = computed(() => genTimes(PERIOD_HOURS[ovPeriod.value] || 6, 40))
+const ovCharts = computed(() => {
+  const u = cluster.value?.usage || { cpu: 0, mem: 0 }
+  const s = `${cluster.value?.id}|ov|${ovPeriod.value}`
+  const h = (seedHash(cluster.value?.id || '') % 1000) / 1000
+  /* per-node averages sit well below the pool-aggregate percentage */
+  const cpuAvg = Math.max(3, u.cpu * (0.5 + h * 0.3))
+  const memAvg = Math.max(8, u.mem * (0.55 + h * 0.25))
+  const up = 120 + h * 260
+  const down = 240 + h * 520
+  const C = CHART_COLORS
+  const band = (key, pts, sp, min) => {
+    const b = genPoints(s + key, { base: sp, variance: sp * 0.4, min: min || 0.1 })
+    return {
+      max: pts.map((v, i) => Math.round((v + b[i]) * 100) / 100),
+      min: pts.map((v, i) => Math.max(min || 0.1, Math.round((v - b[i] * 0.8) * 100) / 100)),
     }
   }
-  if (hot) {
-    sig.push(
-      hot.cpu >= 80
-        ? {
-            key: 'hot-node',
-            tone: 'warning',
-            icon: 'warning',
-            label: `Node ${hot.name} at ${hot.cpu}% CPU`,
-            detail: `Busiest node in ${hot.pool} — check per-node load before adding pods here.`,
-            action: 'pool',
-            poolId: hot.poolId,
-          }
-        : {
-            key: 'hot-node',
-            tone: 'success',
-            icon: 'check-circle',
-            label: 'Node headroom OK',
-            detail: `Busiest node is ${hot.name} (${hot.pool}) at ${hot.cpu}% CPU.`,
-            action: 'pool',
-            poolId: hot.poolId,
-          }
-    )
-  }
-  return sig
+  const cpu = genPoints(s + '|cpu', { base: cpuAvg, variance: 2.4 })
+  const cpuB = band('|cpuB', cpu, 1.5)
+  const mem = genPoints(s + '|mem', { base: memAvg, variance: 1 })
+  const memB = band('|memB', mem, 0.8)
+  const upAvg = genPoints(s + '|up', { base: up, variance: up * 0.35, min: 2 })
+  const downAvg = genPoints(s + '|down', { base: down, variance: down * 0.3, min: 4 })
+  /* current values = last point of the avg series */
+  const cur = (pts) => pts[pts.length - 1]
+  return [
+    {
+      key: 'cpu', label: 'CPU Usage', unit: '%', value: cur(cpu),
+      series: [
+        { label: 'Avg', color: C.primary, points: cpu },
+        { label: 'Max', color: C.green, points: cpuB.max },
+        { label: 'Min', color: C.amber, points: cpuB.min },
+      ],
+    },
+    {
+      key: 'mem', label: 'Memory Usage', unit: '%', value: cur(mem),
+      series: [
+        { label: 'Avg', color: C.primary, points: mem },
+        { label: 'Max', color: C.green, points: memB.max },
+        { label: 'Min', color: C.amber, points: memB.min },
+      ],
+    },
+    {
+      key: 'up', label: 'Uplink Rate', unit: 'kB/s', value: cur(upAvg),
+      series: [{ label: 'Uplink', color: C.blue, points: upAvg }],
+    },
+    {
+      key: 'down', label: 'Downlink Rate', unit: 'kB/s', value: cur(downAvg),
+      series: [{ label: 'Downlink', color: C.violet, points: downAvg }],
+    },
+  ]
 })
-function ruSignalAction(s) {
-  if (s.action === 'events') tab.value = 'events'
-  else if (s.action === 'pool') router.push({ name: 'pool-details', params: { id: cluster.value.id, poolId: s.poolId } })
-}
 
 /* ---------------- control plane health (overview) ---------------- */
 /* Health strip shows the at-a-glance signal; the full replica table with the
@@ -241,11 +218,12 @@ function monitorMetrics(m) {
    GKE frames this as allocation vs utilization, DOKS as a capacity block;
    we add what none of them show: what each pool costs this month. */
 const POOL_COLUMNS = [
-  { label: 'Node pool', name: 'name' },
-  { label: 'Nodes', name: 'nodes', width: '90px' },
-  { label: 'Zones', name: 'zones', width: '150px' },
-  { label: 'CPU', name: 'cpu', width: '170px' },
-  { label: 'Memory', name: 'mem', width: '170px' },
+  { label: 'Node pool', name: 'name', width: '28%' },
+  { label: 'Nodes', name: 'nodes', width: '11%' },
+  { label: 'Zones', name: 'zones', width: '20%' },
+  { label: 'CPU', name: 'cpu', width: '17%' },
+  { label: 'Memory', name: 'mem', width: '17%' },
+  { label: '', name: 'actions', width: '7%' },
 ]
 const poolRows = computed(() =>
   (cluster.value?.pools || []).map((p) => {
@@ -254,6 +232,7 @@ const poolRows = computed(() =>
     return {
       id: p.id,
       name: p.name,
+      pool: p,
       nodes: p.count,
       zones: p.zones.length ? p.zones.map((z) => REGION.zones.find((zz) => zz.id === z)?.name).join(', ') : 'All zones',
       cpu: Math.min(96, Math.max(2, Math.round(u.cpu * (0.55 + h * 0.9)))),
@@ -687,16 +666,43 @@ function menuAction(item) {
 
 <template>
   <div v-if="cluster" class="v2-shell">
-    <!-- ============ LEFT SECTION NAV (styled like the console sidebar) ============ -->
+    <!-- ============ LEFT SECTION NAV (real-panel aside-menu pattern:
+         icon+title header with divider, collapsible chevron groups) ============ -->
     <aside class="v2-nav" aria-label="Cluster sections">
-      <template v-for="(s, i) in sections" :key="s.id || s.group || i">
-        <div v-if="s.group" class="nav-group text-caption-1-strong">{{ s.group }}</div>
-        <button v-else class="nav-item" :class="{ active: tab === s.id }" @click="tab = s.id">
-          {{ s.label }}
-          <span v-if="s.count && s.count.value" class="count">{{ s.count.value }}</span>
-          <span v-if="s.warn && warningCount" class="warn-dot" :title="`${warningCount} active warnings`"></span>
+      <div class="nav-header">
+        <span class="nav-header-icon" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2.6 20.2 7v10L12 21.4 3.8 17V7L12 2.6Z"/><circle cx="12" cy="12" r="3.1"/><path d="M12 5.4v3.5M12 15.1v3.5M8.2 7.3l2.9 1.8M12.9 14.9l2.9 1.8M15.8 7.3l-2.9 1.8M11.1 14.9l-2.9 1.8"/></svg>
+        </span>
+        <h2 class="nav-header-title">Kubernetes</h2>
+      </div>
+
+      <div class="nav-body">
+        <button class="nav-item nav-flat" :class="{ active: tab === 'overview' }" @click="tab = 'overview'">
+          Overview
         </button>
-      </template>
+
+        <div v-for="g in NAV_GROUPS" :key="g.label" class="nav-coll">
+          <button class="nav-item nav-coll-head" :class="{ open: openGroups[g.label] }" @click="toggleGroup(g.label)">
+            <span class="chev" aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg>
+            </span>
+            {{ g.label }}
+          </button>
+          <template v-if="openGroups[g.label]">
+            <button
+              v-for="it in g.items"
+              :key="it.id"
+              class="nav-item nav-sub"
+              :class="{ active: tab === it.id }"
+              @click="tab = it.id"
+            >
+              {{ it.label }}
+              <span v-if="it.count && it.count.value" class="count">{{ it.count.value }}</span>
+              <span v-if="it.warn && warningCount" class="warn-dot" :title="`${warningCount} active warnings`"></span>
+            </button>
+          </template>
+        </div>
+      </div>
 
       <button class="nav-classic text-caption-1" @click="router.push(`/clusters/${cluster.id}`)">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3 5 8l5 5"/></svg>
@@ -882,37 +888,34 @@ function menuAction(item) {
                   <template #item-mem="{ item }">
                     <ArProgress :value="item.mem" :label="item.mem + '%'" />
                   </template>
+                  <template #item-actions="{ item }">
+                    <PoolActions :cluster="cluster" :pool="item.pool" />
+                  </template>
                 </ArDataTableServer>
               </div>
 
-              <!-- 4 · resource usage: utilization + live pressure signals (the SRE view) -->
+              <!-- 4 · monitoring overview: cluster-wide utilization charts -->
               <div class="ar-card" style="padding: var(--space-6)">
                 <div class="card-head-row">
                   <div>
-                    <h3 class="text-title-3" style="margin: 0">Resource usage</h3>
-                    <p class="text-body-2 muted" style="margin: 2px 0 0">Worker-node utilization and scheduling pressure, right now.</p>
+                    <h3 class="text-title-3" style="margin: 0">Monitoring</h3>
+                    <p class="text-body-2 muted" style="margin: 2px 0 0">CPU, memory and network across worker nodes, averaged over the window.</p>
                   </div>
-                  <button class="link-btn" @click="tab = 'monitoring'">Detailed metrics</button>
-                </div>
-
-                <div class="ru-grid">
-                  <div v-for="(r, key) in { cpu: resUsage.cpu, mem: resUsage.mem, pods: resUsage.pods }" :key="key" class="ru-meter">
-                    <span class="text-caption-1">{{ key === 'cpu' ? 'CPU' : key === 'mem' ? 'Memory' : 'Pods' }}</span>
-                    <span class="ru-big" :class="ruToneClass(r.pct)">
-                      {{ key === 'pods' ? r.used : r.used.toFixed(1) }}
-                      <em>of {{ r.cap }} {{ r.unit === 'pods' ? '' : r.unit }}</em>
-                    </span>
-                    <ArProgress :value="r.pct" :label="`${r.pct}%`" />
+                  <div class="card-head-row" style="gap: var(--space-4)">
+                    <ArSelect v-model="ovPeriod" style="width: 160px" :options="Object.keys(PERIOD_HOURS)" aria-label="Select Period" />
+                    <button class="link-btn" @click="tab = 'monitoring'">Detailed metrics</button>
                   </div>
                 </div>
 
-                <div class="ru-signals">
-                  <div v-for="s in ruSignals" :key="s.key" class="ru-signal">
-                    <ArBadge :variant="s.tone" :prepend-icon="s.icon" :text="s.label" />
-                    <span class="text-body-2 muted ru-detail">{{ s.detail }}</span>
-                    <button class="link-btn" @click="ruSignalAction(s)">
-                      {{ s.action === 'events' ? 'View events' : 'Open pool' }}
-                    </button>
+                <div class="ov-grid">
+                  <div v-for="ch in ovCharts" :key="ch.key" class="ov-tile">
+                    <div class="ov-tile-head">
+                      <span class="text-caption-1">{{ ch.label }}</span>
+                      <span class="ov-val" :class="{ warn: ch.unit === '%' && ch.value >= 70, danger: ch.unit === '%' && ch.value > 85 }">
+                        {{ ch.unit === '%' ? ch.value.toFixed(2) + '%' : ch.value.toFixed(2) + ' kB/s' }}
+                      </span>
+                    </div>
+                    <MetricsChart :title="ch.label" :unit="ch.unit" :series="ch.series" :times="ovTimes" />
                   </div>
                 </div>
               </div>
@@ -1432,11 +1435,6 @@ function menuAction(item) {
 
     <!-- ================= NODE MONITORING PANEL ================= -->
     <ArSidePanel :open="monitorPanel" size="md" :title="`Node Monitoring ${monitorNode?.name || ''}`" :subtitle="`${cluster?.name} · ${monitorNode?.az || ''}`" @close="monitorPanel = false">
-      <div class="banner info" style="align-items: flex-start">
-        <svg style="flex:none; margin-top: 2px" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.4M8 5.2v.2"/></svg>
-        <span>Monitoring data is collected by the platform metrics agent. Data missing at any time point indicates that no data was reported.</span>
-      </div>
-
       <div v-if="monitorNode">
         <h3 class="text-title-3" style="margin: 0 0 var(--space-4)">Monitoring Overview</h3>
         <div class="charts-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 0">
@@ -1451,12 +1449,12 @@ function menuAction(item) {
           </div>
           <!-- Memory gauge -->
           <div class="ar-card" style="padding: var(--space-5)">
-            <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Physical Memory Usage</h4>
+            <h4 class="text-body-1" style="margin: 0 0 var(--space-3)">Memory Usage</h4>
             <div class="gauge-pair">
               <div><div class="gauge-num">{{ monitorMetrics(monitorNode).memUsed }}</div><div class="text-caption-1 muted">GiB · Available</div></div>
               <div><div class="gauge-num">{{ monitorMetrics(monitorNode).memLimit }}</div><div class="text-caption-1 muted">GiB · Limit</div></div>
             </div>
-            <DonutGauge :pct="monitorNode.mem" label="Physical Memory Usage" />
+            <DonutGauge :pct="monitorNode.mem" label="Memory Usage" />
           </div>
           <!-- Uplink / Downlink -->
           <div class="ar-card" style="padding: var(--space-5)">
@@ -1644,38 +1642,64 @@ function menuAction(item) {
 
 <style scoped>
 /* this route drops the console chrome — the section nav takes its place as a
-   real sidebar: same look as .sidebar / .side-item in shell.css */
+   real sidebar following the panel's aside-menu pattern: icon+title header
+   (menu-header, 0 16px padding, divider below), 32px chevron group rows
+   (menu-item, 6px 8px padding), indented sub-items, teal active bar */
 .v2-shell { display: flex; align-items: stretch; min-height: calc(100vh - 56px); }
 .v2-content { flex: 1; min-width: 0; padding: var(--space-8) var(--space-6) var(--space-12); }
 
-/* ---- left nav (console-sidebar look: white panel, teal active state) ---- */
+/* ---- left nav (aside-menu look) ---- */
 .v2-nav {
   width: 216px; flex: none;
   background: var(--bg-neutral-t1-1-default);
   border-right: 1px solid var(--st-neutral-t1-5-default);
-  padding: var(--space-4) var(--space-3);
   position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto;
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column;
 }
-.nav-group {
-  margin: var(--space-4) 0 var(--space-1);
-  padding: 0 var(--space-3);
-  color: var(--fg-neutral-t1-3-default);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-.nav-group:first-child { margin-top: 0; }
-.nav-item {
+/* header: icon tile + product title, divider below (menu-header pattern) */
+.nav-header {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  padding: var(--space-5) var(--space-4);
+  border-bottom: 1px solid var(--st-neutral-t1-5-default);
+  flex: none;
+}
+.nav-header-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-primary-t3-1-default);
+}
+.nav-header-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 550;
+  letter-spacing: -0.2px;
+  color: var(--fg-neutral-t1-1-default);
+}
+.nav-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3) var(--space-2);
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   width: 100%;
-  padding: 8px var(--space-3);
+  height: 32px;
+  padding: 6px 8px;
   border: 0;
   border-radius: var(--radius-md);
   background: none;
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 450;
   text-align: left;
   color: var(--fg-neutral-t1-2-default);
@@ -1684,7 +1708,7 @@ function menuAction(item) {
   position: relative;
 }
 .nav-item:hover { background: var(--bg-neutral-t1-4-default); color: var(--fg-neutral-t1-1-default); }
-.nav-item.active { background: var(--bg-primary-t2-1-default); color: var(--fg-primary-t1-1-default); }
+.nav-item.active { background: var(--bg-primary-t2-1-default); color: var(--fg-neutral-t1-1-default); }
 .nav-item.active::before {
   content: "";
   position: absolute;
@@ -1695,6 +1719,29 @@ function menuAction(item) {
   border-radius: var(--radius-circular);
   background: var(--bg-primary-t3-1-default);
 }
+/* standalone item: text aligns with the group labels (chevron width + gaps) */
+.nav-flat { padding-left: 40px; }
+/* collapsible group row: chevron box + label (menu-item--has-icon pattern) */
+.nav-coll-head {
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--fg-neutral-t1-1-default);
+}
+.nav-coll-head .chev {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-neutral-t1-3-default);
+  color: var(--fg-neutral-t1-2-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nav-coll-head .chev svg { transition: transform 0.15s; }
+.nav-coll-head:not(.open) .chev svg { transform: rotate(-90deg); }
+/* sub items sit under the group label */
+.nav-sub { padding-left: 40px; }
 .nav-item .count {
   margin-inline-start: auto;
   min-width: 20px;
@@ -1719,8 +1766,9 @@ function menuAction(item) {
   align-items: center;
   gap: 6px;
   margin-top: auto;
-  padding: 6px var(--space-3);
+  padding: var(--space-4);
   border: 0;
+  border-top: 1px solid var(--st-neutral-t1-5-default);
   background: none;
   font: inherit;
   color: var(--fg-neutral-t1-3-default);
@@ -1773,34 +1821,26 @@ function menuAction(item) {
 }
 .cp-chip.down { background: var(--bg-error-t2-1-default); color: var(--fg-error-t2-1-default); }
 
-/* resource usage (overview): utilization meters + pressure signals */
-.ru-grid {
+/* monitoring overview (overview): 2×2 chart tiles */
+.ov-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-6);
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
   margin-top: var(--space-4);
 }
-.ru-meter { display: flex; flex-direction: column; gap: var(--space-1); }
-.ru-big {
-  font-size: 22px;
-  font-weight: 450;
-  letter-spacing: -0.4px;
-  color: var(--fg-neutral-t1-1-default);
-  line-height: 1.2;
-}
-.ru-big em { font-style: normal; font-size: 13px; font-weight: 400; color: var(--fg-neutral-t1-3-default); letter-spacing: 0; }
-.ru-big.warn { color: var(--fg-warning-t1-1-default); }
-.ru-big.danger { color: var(--fg-error-t1-1-default); }
-.ru-signals {
-  border-top: 1px solid var(--st-neutral-t1-5-default);
-  margin-top: var(--space-5);
-  padding-top: var(--space-4);
+.ov-tile-head {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
 }
-.ru-signal { display: flex; align-items: center; gap: var(--space-3); }
-.ru-signal .ru-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-val {
+  font-size: 15px;
+  font-weight: 450;
+  color: var(--fg-neutral-t1-1-default);
+}
+.ov-val.warn { color: var(--fg-warning-t1-1-default); }
+.ov-val.danger { color: var(--fg-error-t1-1-default); }
 
 /* usage trends: two charts side by side */
 .mon-grid {
@@ -1827,17 +1867,19 @@ function menuAction(item) {
   .v2-shell { flex-direction: column; }
   .v2-nav {
     position: static; height: auto; width: auto;
-    flex-direction: row; flex-wrap: wrap;
     border-right: 0;
     border-bottom: 1px solid var(--st-neutral-t1-5-default);
   }
-  .nav-group { width: 100%; }
-  .nav-item { width: auto; }
+  .nav-header { display: none; }
+  .nav-body { flex-direction: row; flex-wrap: wrap; }
+  .nav-coll { display: contents; }
+  .nav-coll-head { display: none; }
+  .nav-item { width: auto; padding-left: 12px; }
   .nav-classic { display: none; }
   .health-card { grid-template-columns: 1fr; }
   .health-seg + .health-seg { border-left: 0; border-top: 1px solid var(--st-neutral-t1-5-default); }
   .about-grid { grid-template-columns: 1fr; }
   .mon-grid { grid-template-columns: 1fr; }
-  .ru-grid { grid-template-columns: 1fr; }
+  .ov-grid { grid-template-columns: 1fr; }
 }
 </style>
