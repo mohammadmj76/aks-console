@@ -14,7 +14,7 @@ const router = useRouter()
 const cluster = computed(() => store.getCluster(route.params.id))
 const vpc = computed(() => VPCS.find(v => v.id === cluster.value?.vpcId))
 const returnRoute = computed(() => ({
-  name: route.query.view === 'v3' ? 'cluster-details-v3' : route.query.view === 'classic' ? 'cluster-details' : 'cluster-details-v2',
+  name: route.query.view === 'v2' ? 'cluster-details-v2' : 'cluster-details-v3',
   params: { id: route.params.id },
   query: { tab: route.query.view === 'v3' ? 'overview' : 'pools' },
 }))

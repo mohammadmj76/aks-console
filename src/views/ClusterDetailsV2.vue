@@ -10,7 +10,7 @@
        4. how do I connect?   → endpoint + kubeconfig
        5. what just happened? → O&M event list with the Events section's filters
    - trends and full tables live in their own sections, not on the overview
-   Route: /clusters/:id/v2 (deep link; the cluster list row menu links here) */
+   Shared routes: /clusters/:id/v3 (default) and /clusters/:id/v2 (direct link). */
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store, downloadKubeconfig, newerVersionAvailable } from '../store'
@@ -20,7 +20,7 @@ import MetricsChart from '../components/ui/MetricsChart.vue'
 import ArDataTableServer from '../components/ui/ArDataTableServer.vue'
 import ArBadge from '../components/ui/ArBadge.vue'
 import ArButton from '../components/ui/ArButton.vue'
-import { ArButton as UIKitButton, ArSubHeader as UIKitSubHeader } from '../uikit'
+import { ArSubHeader as UIKitSubHeader } from '../uikit'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
 import DonutGauge from '../components/ui/DonutGauge.vue'
@@ -107,7 +107,8 @@ watch(tab, (t) => {
 watch(
   () => route.query.tab,
   (t) => {
-    if (t && t !== tab.value && sections.some((x) => x.id === t)) tab.value = t
+    const next = sections.some((x) => x.id === t) ? t : 'overview'
+    if (next !== tab.value) tab.value = next
   }
 )
 
@@ -523,12 +524,12 @@ function nodesOf(pool) {
 
 /* Dedicated node pool creation page; keep old list deep links working. */
 function openCreatePool() {
-  router.push({ name: 'pool-create', params: { id: route.params.id }, query: newOverview.value ? { view: 'v3' } : {} })
+  router.push({ name: 'pool-create', params: { id: route.params.id }, query: { view: newOverview.value ? 'v3' : 'v2' } })
 }
 watch(
   () => route.query.add,
   value => {
-    if (value === 'pool') router.replace({ name: 'pool-create', params: { id: route.params.id }, query: newOverview.value ? { view: 'v3' } : {} })
+    if (value === 'pool') router.replace({ name: 'pool-create', params: { id: route.params.id }, query: { view: newOverview.value ? 'v3' : 'v2' } })
   },
   { immediate: true }
 )
@@ -594,7 +595,6 @@ async function copy(text) {
 
 function menuAction(item) {
   if (item.action === 'kube') downloadKubeconfig(cluster.value)
-  if (item.action === 'classic') router.push(`/clusters/${cluster.value.id}`)
   if (item.action === 'delete') deleteOpen.value = true
 }
 
@@ -640,11 +640,6 @@ function menuAction(item) {
         </div>
       </div>
 
-      <UIKitButton v-if="newOverview" variant="ghost" class="design-c-compare" @click="router.push(`/clusters/${cluster.id}/v2`)">Compare with design B</UIKitButton>
-      <button class="nav-classic text-caption-1" @click="router.push(`/clusters/${cluster.id}`)">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3 5 8l5 5"/></svg>
-        Switch to classic view
-      </button>
     </aside>
 
     <main class="v2-content">
@@ -683,7 +678,6 @@ function menuAction(item) {
         <ActionMenu
           :items="[
             { label: 'Download kubeconfig', action: 'kube' },
-            { label: 'Switch to classic view', action: 'classic' },
             { sep: true },
             { label: 'Delete cluster', danger: true, action: 'delete' },
           ]"
@@ -1416,7 +1410,6 @@ function menuAction(item) {
 .v2-shell { display: flex; align-items: stretch; min-height: calc(100vh - 56px); }
 .v2-shell--design-c { background: var(--bg-neutral-t1-3-default); }
 .v2-shell--design-c .v2-content { padding: 24px; }
-.design-c-compare { margin: 16px 12px 0; }
 .design-c-title { margin: -24px -24px 24px; }
 .design-c-title :deep(.v11-1-0-ArContainer) { max-width: none; padding-inline: 24px; }
 .v2-content { flex: 1; min-width: 0; padding: var(--space-8) var(--space-6) var(--space-12); }
@@ -1534,21 +1527,6 @@ function menuAction(item) {
   border-radius: var(--radius-circular);
   background: var(--bg-warning-t1-1-default);
 }
-.nav-classic {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: auto;
-  padding: var(--space-4);
-  border: 0;
-  border-top: 1px solid var(--st-neutral-t1-5-default);
-  background: none;
-  font: inherit;
-  color: var(--fg-neutral-t1-3-default);
-  cursor: pointer;
-  text-align: left;
-}
-.nav-classic:hover { color: var(--fg-primary-t1-1-default); }
 
 /* ---- overview: single card stack ---- */
 .ov-main { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
@@ -1648,7 +1626,6 @@ function menuAction(item) {
   .nav-coll { display: contents; }
   .nav-coll-head { display: none; }
   .nav-item { width: auto; padding-left: 12px; }
-  .nav-classic { display: none; }
   .health-card { grid-template-columns: 1fr; }
   .health-seg + .health-seg { border-left: 0; border-top: 1px solid var(--st-neutral-t1-5-default); }
   .about-grid { grid-template-columns: 1fr; }

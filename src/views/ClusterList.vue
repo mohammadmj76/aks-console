@@ -115,9 +115,6 @@ function doDelete() {
 
 function menuAction(c, item) {
   if (item.action === 'view') router.push(`/clusters/${c.id}`)
-  /* A/B test entry: variant B of the cluster detail page */
-  if (item.action === 'view2') router.push(`/clusters/${c.id}/v2`)
-  if (item.action === 'view3') router.push(`/clusters/${c.id}/v3`)
   if (item.action === 'kube') downloadKubeconfig(c)
   if (item.action === 'pool') router.push({ name: 'cluster-details', params: { id: c.id }, query: { tab: 'pools', add: 'pool' } })
   if (item.action === 'label') askLabel(c)
@@ -274,8 +271,6 @@ function saveLabels() {
           <ActionMenu
             :items="[
               { label: 'View details', action: 'view' },
-              { label: 'View details (new)', action: 'view2' },
-              { label: 'View details (design C)', action: 'view3' },
               { label: 'Download kubeconfig', action: 'kube' },
               { label: 'Create node pool', action: 'pool' },
               { label: 'Add label', action: 'label' },
