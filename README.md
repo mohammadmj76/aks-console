@@ -27,6 +27,14 @@ npm install
 npm run dev      # http://localhost:5175
 ```
 
+### Private UIKit prerequisite
+
+The main create-cluster page uses the real `@panel/uikit` package (tested with 11.1.0), not the prototype stand-ins. The private package is not included in this repository.
+
+For local development, create an ignored `.env.local` file with `UIKIT_PATH` pointing to an existing authorized installation of `@panel/uikit`. The directory must contain `index.js` and `styles.css`, with its dependencies available from the installation. Alternatively, install the package through your organization's approved private registry setup.
+
+Do not commit registry credentials, private library files, or a machine-specific path. A clean checkout or hosted build needs authorized package access before it can build; the previous Vercel instructions alone are not sufficient for this version.
+
 ## Production build
 
 ```bash
@@ -53,9 +61,7 @@ Component classes (`.ar-btn`, `.ar-card`, `.ar-table`, …) live in
 
 ### UIKit mapping
 
-This prototype re-implements the Ar UIKit look in plain CSS. Each element
-corresponds to a real Ar component — when porting into the real console,
-replace the markup with:
+The main create-cluster page imports real UIKit components through `src/uikit.js`. Other prototype screens and the experimental stepper still use local stand-ins. The following table documents the legacy mapping for those screens:
 
 | Prototype | Ar UIKit component |
 | --- | --- |

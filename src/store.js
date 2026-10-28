@@ -51,7 +51,7 @@ export const store = reactive({
         specs: (poolDraft.specs || []).map((s) => ({ flavorId: s.flavorId, zones: [...s.zones] })),
         zones: specZones.length ? specZones : zones,
         subnets: [...draft.subnetIds],
-        volumeGb: 50,
+        volumeGb: poolDraft.rootDisk ?? 50,
         image: poolDraft.image || 'ubuntu-22.04',
         createdAt: new Date().toISOString(),
         labels: [...(poolDraft.labels || [])],
@@ -69,7 +69,12 @@ export const store = reactive({
       progressLabel: 'Allocating control plane',
       version: ver.patch,
       region: draft.regionId || 'ir-central-1',
-      cp: { plan: draft.cp.plan, ha: draft.cp.ha ?? true },
+      cp: {
+        plan: draft.cp.plan,
+        ha: draft.cp.ha ?? true,
+        distribution: draft.cp.distribution || 'multi-az',
+        zone: draft.cp.zone || null,
+      },
       vpcId: draft.vpcId,
       subnetIds: [...draft.subnetIds],
       podCidr: draft.podCidr,
@@ -175,6 +180,16 @@ export const store = reactive({
     pool.labels = labels
     this.events[cluster.id].unshift({ ts: timeNow(), type: 'Normal', reason: 'PoolLabelsUpdated', msg: `Labels updated on node pool ${pool.name}` })
     this.toast('success', 'Labels updated', `${pool.name} now has ${labels.length} label${labels.length === 1 ? '' : 's'}.`)
+  },
+
+  renameCluster(cluster, name) {
+    if (!/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(name)) return false
+    if (this.clusters.some((c) => c.id !== cluster.id && c.name === name)) return false
+    const old = cluster.name
+    cluster.name = name
+    this.events[cluster.id].unshift({ ts: timeNow(), type: 'Normal', reason: 'ClusterRenamed', msg: `Cluster ${old} renamed to ${name}` })
+    this.toast('success', 'Cluster renamed', `${old} is now ${name}.`)
+    return true
   },
 
   setClusterLabels(cluster, labels) {

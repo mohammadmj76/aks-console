@@ -20,6 +20,7 @@ import MetricsChart from '../components/ui/MetricsChart.vue'
 import ArDataTableServer from '../components/ui/ArDataTableServer.vue'
 import ArBadge from '../components/ui/ArBadge.vue'
 import ArButton from '../components/ui/ArButton.vue'
+import { ArButton as UIKitButton, ArSubHeader as UIKitSubHeader } from '../uikit'
 import ArToggle from '../components/ui/ArToggle.vue'
 import ArSidePanel from '../components/ui/ArSidePanel.vue'
 import DonutGauge from '../components/ui/DonutGauge.vue'
@@ -29,8 +30,12 @@ import ArSection from '../components/ui/ArSection.vue'
 import ArEmpty from '../components/ui/ArEmpty.vue'
 import ActionMenu from '../components/ui/ActionMenu.vue'
 import PoolActions from '../components/PoolActions.vue'
+import NodePoolList from '../components/NodePoolList.vue'
+import ClusterOverviewV3 from '../components/ClusterOverviewV3.vue'
 import ClusterStatus from '../components/ClusterStatus.vue'
 
+const props = defineProps({ overviewDesign: { type: String, default: 'v2' } })
+const newOverview = computed(() => props.overviewDesign === 'v3')
 const route = useRoute()
 const router = useRouter()
 
@@ -516,86 +521,17 @@ function nodesOf(pool) {
   }))
 }
 
-/* add pool panel */
-const showAddPool = ref(false)
-const poolForm = reactive({ name: '', flavor: 'g6.xlarge.2', count: 2, labels: [], taints: [], volumeGb: 50 })
-const poolFormOk = computed(() => /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(poolForm.name) && poolForm.count >= 1)
-/* deep link from the cluster list row menu: ?add=pool opens the Add node pool panel */
+/* Dedicated node pool creation page; keep old list deep links working. */
+function openCreatePool() {
+  router.push({ name: 'pool-create', params: { id: route.params.id }, query: newOverview.value ? { view: 'v3' } : {} })
+}
 watch(
   () => route.query.add,
-  (v) => {
-    if (v === 'pool') {
-      showAddPool.value = true
-      router.replace({ query: { ...route.query, add: undefined } })
-    }
+  value => {
+    if (value === 'pool') router.replace({ name: 'pool-create', params: { id: route.params.id }, query: newOverview.value ? { view: 'v3' } : {} })
   },
   { immediate: true }
 )
-const K8S_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?$/
-const K8S_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
-const poolMetaOk = computed(() =>
-  poolForm.labels.every((l) => {
-    const [k, v] = l.split('=')
-    return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v)
-  }) && poolForm.taints.every((t) => K8S_KEY.test(t.key) && (t.value === '' || K8S_VAL.test(t.value)))
-)
-const poolLabelInput = ref('')
-const poolLabelError = ref('')
-function addPoolLabel(e) {
-  /* read the DOM value at Enter time: the ref can lag behind while an IME
-     composition is still open (Persian keyboards, mobile keyboards) */
-  const raw = e && e.target ? e.target.value : poolLabelInput.value
-  const v = raw.trim().replace(/\s+/g, '')
-  poolLabelError.value = ''
-  if (!v) {
-    /* nothing typed */
-  } else if (!v.includes('=')) {
-    poolLabelError.value = 'Use the key=value format. Example: team=backend.'
-  } else if (poolForm.labels.includes(v)) {
-    poolLabelError.value = 'This label is already added.'
-  } else if (poolForm.labels.length >= 20) {
-    poolLabelError.value = 'You can add up to 20 labels per pool.'
-  } else {
-    poolForm.labels.push(v)
-  }
-  poolLabelInput.value = ''
-  if (e && e.target) e.target.value = ''
-}
-/* ignore the Enter that commits an IME composition, so the text stays in
-   the box and the next Enter adds the label */
-function onPoolLabelKeydown(e) {
-  if (e.key !== 'Enter') return
-  if (e.isComposing || e.keyCode === 229) return
-  e.preventDefault()
-  addPoolLabel(e)
-}
-function removePoolLabel(l) {
-  poolForm.labels = poolForm.labels.filter((x) => x !== l)
-}
-function addPoolTaint() {
-  poolForm.taints.push({ key: '', value: '', effect: 'NoSchedule' })
-}
-function removePoolTaint(t) {
-  poolForm.taints = poolForm.taints.filter((x) => x !== t)
-}
-function submitPool() {
-  if (!poolFormOk.value || !poolMetaOk.value || !cluster.value) return
-  const zones = cluster.value.subnetIds.map((id) => vpc.value?.subnets.find((s) => s.id === id)?.zone).filter(Boolean)
-  store.addPool(cluster.value, {
-    name: poolForm.name,
-    count: poolForm.count,
-    specs: [{ flavorId: poolForm.flavor, zones: zones.length ? zones : REGION.zones.map((z) => z.id) }],
-    zones: zones.length ? zones : REGION.zones.map((z) => z.id),
-    subnets: [...cluster.value.subnetIds],
-    volumeGb: poolForm.volumeGb,
-    labels: [...poolForm.labels],
-    taints: poolForm.taints.filter((t) => t.key).map((t) => ({ ...t })),
-  })
-  showAddPool.value = false
-  poolForm.name = ''
-  poolForm.labels = []
-  poolForm.taints = []
-}
 
 /* delete cluster */
 const deleteOpen = ref(false)
@@ -665,7 +601,7 @@ function menuAction(item) {
 </script>
 
 <template>
-  <div v-if="cluster" class="v2-shell">
+  <div v-if="cluster" class="v2-shell" :class="{ 'v2-shell--design-c': newOverview }">
     <!-- ============ LEFT SECTION NAV (real-panel aside-menu pattern:
          icon+title header with divider, collapsible chevron groups) ============ -->
     <aside class="v2-nav" aria-label="Cluster sections">
@@ -704,6 +640,7 @@ function menuAction(item) {
         </div>
       </div>
 
+      <UIKitButton v-if="newOverview" variant="ghost" class="design-c-compare" @click="router.push(`/clusters/${cluster.id}/v2`)">Compare with design B</UIKitButton>
       <button class="nav-classic text-caption-1" @click="router.push(`/clusters/${cluster.id}`)">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3 5 8l5 5"/></svg>
         Switch to classic view
@@ -711,7 +648,8 @@ function menuAction(item) {
     </aside>
 
     <main class="v2-content">
-    <div class="crumbs">
+    <UIKitSubHeader v-if="newOverview && tab === 'overview'" class="design-c-title" title="Overview" :tabs-props="{ items: [] }" :back="{ name: 'clusters' }" />
+    <div v-else class="crumbs">
       <router-link to="/clusters">Kubernetes</router-link>
       <span class="sep">/</span>
       <router-link to="/clusters">Clusters</router-link>
@@ -719,7 +657,7 @@ function menuAction(item) {
       <span class="here">{{ cluster.name }}</span>
     </div>
 
-    <div class="page-header">
+    <div v-if="tab !== 'pools' && !(newOverview && tab === 'overview')" class="page-header">
       <div>
         <div class="title-row">
           <h1 class="text-title-2" style="margin: 0">{{ cluster.name }}</h1>
@@ -773,7 +711,8 @@ function menuAction(item) {
 
     <div class="v2-main">
         <!-- ================= OVERVIEW ================= -->
-        <template v-if="tab === 'overview'">
+        <ClusterOverviewV3 v-if="newOverview && tab === 'overview'" :cluster="cluster" @create-pool="openCreatePool" @network="tab = 'networking'" />
+        <template v-if="tab === 'overview' && !newOverview">
           <div class="ov-main">
 
               <!-- 1 · health: is the cluster OK, right now? -->
@@ -1025,75 +964,7 @@ function menuAction(item) {
 
         <!-- ================= NODE POOLS ================= -->
         <template v-if="tab === 'pools'">
-          <div class="ar-section-head">
-            <div>
-              <h2 class="text-title-3" style="margin: 0">Node pools</h2>
-              <p class="text-body-2 muted" style="margin: 0">Groups of worker nodes with the same flavor. Nodes join from the selected subnets.</p>
-            </div>
-            <ArButton variant="primary" @click="showAddPool = true">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
-              Add node pool
-            </ArButton>
-          </div>
-
-          <div v-if="!cluster.pools.length" class="ar-card">
-            <ArEmpty title="No node pools" desc="Every cluster needs at least one node pool to run workloads.">
-              <ArButton variant="primary" sm @click="showAddPool = true">Add node pool</ArButton>
-            </ArEmpty>
-          </div>
-
-          <div v-for="pool in cluster.pools" :key="pool.id" class="ar-card" style="margin-bottom: var(--space-4)">
-            <div style="display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--st-neutral-t1-5-default)">
-              <div style="flex: 1; min-width: 0">
-                <router-link
-                  :to="{ name: 'pool-details', params: { id: cluster.id, poolId: pool.id } }"
-                  class="pool-name-link text-body-1"
-                >{{ pool.name }}</router-link>
-                <div class="cell-sub" style="margin-top: 2px">
-                  {{ poolFlavorIds(pool).map((id) => flavorName(id)).join(', ') }} ·
-                  {{ pool.count }} node{{ pool.count === 1 ? '' : 's' }} · ssd-g1 {{ pool.volumeGb }} GB
-                  · {{ pool.zones.length ? pool.zones.map((z) => REGION.zones.find((zz) => zz.id === z)?.name).join(', ') : 'all zones' }}
-                  · {{ fmtIRR(poolCost(pool)) }} IRR / month
-                </div>
-                <div v-if="(pool.labels?.length || pool.taints?.length)" class="pool-meta" style="margin-top: var(--space-2)">
-                  <ArBadge v-for="l in pool.labels || []" :key="l" variant="neutral" :text="l" />
-                  <ArBadge
-                    v-for="(t, i) in pool.taints || []"
-                    :key="'t' + i"
-                    variant="warning"
-                    :text="`${t.key}${t.value ? '=' + t.value : ''}:${t.effect}`"
-                  />
-                </div>
-              </div>
-              <div style="display: flex; align-items: center; gap: var(--space-2)">
-                <PoolActions :cluster="cluster" :pool="pool" />
-              </div>
-            </div>
-
-            <div style="padding: 0 var(--space-2)">
-              <table class="ar-table">
-                <thead>
-                  <tr><th>Node</th><th>Status</th><th>Flavor</th><th>Zone</th><th>Internal IP</th><th style="width: 180px">CPU</th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="n in nodesOf(pool)" :key="n.name">
-                    <td class="mono">{{ n.name }}</td>
-                    <td>
-                      <ArBadge :variant="n.ready ? 'success' : 'danger'" :prepend-icon="n.ready ? 'check-circle' : 'error'" :text="n.ready ? 'Ready' : 'NotReady'" />
-                    </td>
-                    <td class="text-body-2 muted">{{ flavorName(n.flavor) }}</td>
-                    <td class="text-body-2 muted">{{ REGION.zones.find((z) => z.id === n.zone)?.name }}</td>
-                    <td class="mono muted">{{ n.ip }}</td>
-                    <td><ArProgress :value="n.cpu" :label="n.cpu + '%'" /></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <p class="text-caption-1 muted">
-            Managed control-plane VMs are not listed here — they are operated by Arvan SRE and counted separately in the control-plane card.
-          </p>
+          <NodePoolList :cluster="cluster" @create="openCreatePool" />
         </template>
 
         <!-- ================= STORAGE ================= -->
@@ -1200,14 +1071,6 @@ function menuAction(item) {
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>
                   </button>
                 </span></div>
-              </div>
-            </div>
-
-            <div class="ar-card" style="padding: var(--space-6)">
-              <h3 class="text-title-3" style="margin: 0 0 var(--space-4)">Exposing services</h3>
-              <div class="kv">
-                <div class="row"><span class="k" style="width: 120px">LoadBalancer</span><span class="v">Cilium LB-IPAM assigns addresses from the node subnet (zonal L2). Multi-zone L4 LB is on the roadmap.</span></div>
-                <div class="row"><span class="k" style="width: 120px">Ingress / CDN</span><span class="v">Use Arvan CDN in front of an L7 Ingress, or a LoadBalancer Service for TCP/UDP.</span></div>
               </div>
             </div>
           </div>
@@ -1500,101 +1363,6 @@ function menuAction(item) {
       </div>
     </ArSidePanel>
 
-    <!-- ================= ADD NODE POOL ================= -->
-    <ArSidePanel :open="showAddPool" title="Add node pool" :subtitle="cluster.name" @close="showAddPool = false">
-      <div class="ar-field">
-        <label>Pool name<span class="req">*</span></label>
-        <div class="ar-input" :class="{ 'error-mode': poolForm.name && !/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(poolForm.name) }">
-          <input v-model="poolForm.name" placeholder="e.g. worker-pool" spellcheck="false" style="text-transform: lowercase" />
-        </div>
-        <span class="hint">Lowercase letters, digits and dashes. 3–40 characters.</span>
-      </div>
-
-      <div class="ar-field">
-        <span class="ar-field-label">Flavor<span class="req">*</span></span>
-        <div class="ar-input">
-          <select v-model="poolForm.flavor">
-            <option v-for="f in FLAVOR_CATALOG" :key="f.id" :value="f.id">
-              {{ f.id }} · {{ f.vcpu }} vCPU / {{ f.ram }} GB · {{ f.category }}
-            </option>
-          </select>
-          <svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
-        </div>
-      </div>
-
-      <div style="display: flex; gap: var(--space-4)">
-        <div class="ar-field">
-          <label>Node count</label>
-          <div class="count-input">
-            <button :disabled="poolForm.count <= 1" @click="poolForm.count--">−</button>
-            <input v-model.number="poolForm.count" type="number" min="1" max="20" />
-            <button :disabled="poolForm.count >= 20" @click="poolForm.count++">+</button>
-          </div>
-        </div>
-        <div class="ar-field" style="flex: 1">
-          <label>Root volume (ssd-g1)</label>
-          <div class="ar-input">
-            <select v-model.number="poolForm.volumeGb">
-              <option :value="50">50 GB</option>
-              <option :value="100">100 GB</option>
-              <option :value="200">200 GB</option>
-            </select>
-            <svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6.5 4 4 4-4"/></svg>
-          </div>
-        </div>
-      </div>
-
-      <div class="ar-field">
-        <label>Node labels</label>
-        <div class="tagbox">
-          <ArBadge v-for="l in poolForm.labels" :key="l" variant="neutral">
-            {{ l }}
-            <button class="tag-x" aria-label="Remove label" @click="removePoolLabel(l)">
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
-            </button>
-          </ArBadge>
-          <input v-model="poolLabelInput" placeholder="key=value" spellcheck="false" @input="poolLabelError = ''" @keydown="onPoolLabelKeydown" />
-        </div>
-        <span v-if="poolLabelError" class="error-text">{{ poolLabelError }}</span>
-        <span v-else-if="poolForm.labels.length && !poolMetaOk" class="error-text">Use the key=value format: lowercase keys, values up to 63 characters.</span>
-        <span v-else class="hint">Applied as Kubernetes labels to every node of this pool. Press Enter after each label.</span>
-      </div>
-
-      <div class="ar-field">
-        <span class="ar-field-label">Taints</span>
-        <div style="display: flex; flex-direction: column; gap: var(--space-2)">
-          <div v-for="(t, i) in poolForm.taints" :key="i" style="display: flex; gap: var(--space-2)">
-            <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.key && !K8S_KEY.test(t.key) }">
-              <input v-model="t.key" placeholder="Key" spellcheck="false" style="text-transform: lowercase" />
-            </div>
-            <div class="ar-input" style="flex: 2" :class="{ 'error-mode': t.value && !K8S_VAL.test(t.value) }">
-              <input v-model="t.value" placeholder="Value" spellcheck="false" />
-            </div>
-            <ArSelect
-              class="taint-effect"
-              style="width: 150px"
-              v-model="t.effect"
-              :options="['NoSchedule', 'PreferNoSchedule', 'NoExecute']"
-              aria-label="Taint effect"
-            />
-            <button class="taint-x" aria-label="Remove taint" @click="removePoolTaint(t)">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 4 8 8M12 4l-8 8"/></svg>
-            </button>
-          </div>
-          <button class="link-btn" @click="addPoolTaint">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
-            Add taint
-          </button>
-        </div>
-        <span v-if="poolForm.taints.length && !poolMetaOk" class="error-text">Taint keys must be lowercase (letters, digits, -, .). Value is optional.</span>
-      </div>
-
-      <template #footer>
-        <ArButton variant="tertiary" @click="showAddPool = false">Cancel</ArButton>
-        <ArButton variant="primary" :disabled="!poolFormOk || !poolMetaOk" @click="submitPool">Add pool</ArButton>
-      </template>
-    </ArSidePanel>
-
     <!-- ================= UPGRADE / DELETE CONFIRM ================= -->
     <ArSidePanel :open="upgradeOpen" title="Upgrade cluster" :subtitle="`${cluster.name} · v${cluster.version} → v${upgradeTarget.patch}`" @close="upgradeOpen = false">
       <div class="banner info">
@@ -1646,6 +1414,11 @@ function menuAction(item) {
    (menu-header, 0 16px padding, divider below), 32px chevron group rows
    (menu-item, 6px 8px padding), indented sub-items, teal active bar */
 .v2-shell { display: flex; align-items: stretch; min-height: calc(100vh - 56px); }
+.v2-shell--design-c { background: var(--bg-neutral-t1-3-default); }
+.v2-shell--design-c .v2-content { padding: 24px; }
+.design-c-compare { margin: 16px 12px 0; }
+.design-c-title { margin: -24px -24px 24px; }
+.design-c-title :deep(.v11-1-0-ArContainer) { max-width: none; padding-inline: 24px; }
 .v2-content { flex: 1; min-width: 0; padding: var(--space-8) var(--space-6) var(--space-12); }
 
 /* ---- left nav (aside-menu look) ---- */

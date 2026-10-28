@@ -1,24 +1,25 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import * as UIKit from '../../uikit'
 import {
   REGION, FLAVOR_CATALOG, FLAVOR_CATEGORIES, fmtIRR,
 } from '../../data'
-import ArCheckbox from '../ui/ArCheckbox.vue'
-import ArButton from '../ui/ArButton.vue'
-import ArSelect from '../ui/ArSelect.vue'
+import LegacyArCheckbox from '../ui/ArCheckbox.vue'
+import LegacyArButton from '../ui/ArButton.vue'
+import LegacyArSelect from '../ui/ArSelect.vue'
 import ArRadioDot from '../ui/ArRadioDot.vue'
-import ArInput from '../ui/ArInput.vue'
+import LegacyArInput from '../ui/ArInput.vue'
 import ArRangeSliderInput from '../ui/ArRangeSliderInput.vue'
-import ArField from '../ui/ArField.vue'
-import ArTag from '../ui/ArTag.vue'
-import ArBadge from '../ui/ArBadge.vue'
-import ArLinkButton from '../ui/ArLinkButton.vue'
-import ArTable from '../ui/ArTable.vue'
-import ArTableRow from '../ui/ArTableRow.vue'
-import ArTableCell from '../ui/ArTableCell.vue'
-import ArPagination from '../ui/ArPagination.vue'
-import ArTab from '../ui/ArTab.vue'
-import ArIcon from '../ui/ArIcon.vue'
+import LegacyArField from '../ui/ArField.vue'
+import LegacyArTag from '../ui/ArTag.vue'
+import LegacyArBadge from '../ui/ArBadge.vue'
+import LegacyArLinkButton from '../ui/ArLinkButton.vue'
+import LegacyArTable from '../ui/ArTable.vue'
+import LegacyArTableRow from '../ui/ArTableRow.vue'
+import LegacyArTableCell from '../ui/ArTableCell.vue'
+import LegacyArPagination from '../ui/ArPagination.vue'
+import LegacyArTab from '../ui/ArTab.vue'
+import LegacyArIcon from '../ui/ArIcon.vue'
 
 /*
  * One node pool inside the stepper's accordion list.
@@ -32,8 +33,24 @@ const props = defineProps({
   ok: { type: Boolean, default: true },
   /* zones the pool may use — non-empty when master distribution is Single AZ */
   allowedZones: { type: Array, default: () => [] },
+  designRefresh: { type: Boolean, default: false },
+  configurationOnly: { type: Boolean, default: false },
 })
 const emit = defineEmits(['toggle', 'remove'])
+const ArCheckbox = computed(() => props.designRefresh ? UIKit.ArCheckbox : LegacyArCheckbox)
+const ArButton = computed(() => props.designRefresh ? UIKit.ArButton : LegacyArButton)
+const ArSelect = computed(() => props.designRefresh ? UIKit.ArSelect : LegacyArSelect)
+const ArInput = computed(() => props.designRefresh ? UIKit.ArInput : LegacyArInput)
+const ArField = computed(() => props.designRefresh ? UIKit.ArField : LegacyArField)
+const ArTag = computed(() => props.designRefresh ? UIKit.ArTag : LegacyArTag)
+const ArBadge = computed(() => props.designRefresh ? UIKit.ArBadge : LegacyArBadge)
+const ArLinkButton = computed(() => props.designRefresh ? UIKit.ArLinkButton : LegacyArLinkButton)
+const ArTable = computed(() => props.designRefresh ? UIKit.ArTable : LegacyArTable)
+const ArTableRow = computed(() => props.designRefresh ? UIKit.ArTableRow : LegacyArTableRow)
+const ArTableCell = computed(() => props.designRefresh ? UIKit.ArTableCell : LegacyArTableCell)
+const ArTab = computed(() => props.designRefresh ? UIKit.ArTab : LegacyArTab)
+const ArIcon = computed(() => props.designRefresh ? UIKit.ArIcon : LegacyArIcon)
+const ArPagination = computed(() => props.designRefresh ? UIKit.ArPagination : LegacyArPagination)
 
 const displayName = computed(() => props.pool.name || `node-pool-${props.index + 1}`)
 
@@ -45,6 +62,7 @@ const missingItems = computed(() => {
   if (!p.specs.length) items.push('Flavor: pick one from the flavor table')
   else if (!p.specs[0].zones.length) items.push('Availability zone: select at least one zone for the chosen flavor')
   if (!(Number.isInteger(p.count) && p.count >= 1 && p.count <= 20)) items.push('Node count: between 1 and 20')
+  if (props.designRefresh && !(Number.isInteger(p.rootDisk) && p.rootDisk >= 25 && p.rootDisk <= 1000)) items.push('Root volume: between 25 and 1000 GB')
   if (p.labels.length && !p.labels.every((l) => {
     const [k, v] = l.split('=')
     return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
@@ -124,7 +142,7 @@ const azCell = (f) =>
 const availableZones = (f) => flavorZones(f).filter((z) => !z.soldOut).map((z) => z.id)
 const allZonesSoldOut = (f) => !availableZones(f).length
 
-const FLAVOR_COLUMNS = [
+const ALL_FLAVOR_COLUMNS = [
   { label: '', name: 'pick' },
   { label: 'Flavor', name: 'flavor' },
   { label: 'AZ', name: 'az' },
@@ -135,10 +153,21 @@ const FLAVOR_COLUMNS = [
   { label: 'Pricing', name: 'pricing' },
 ]
 
+const FLAVOR_COLUMNS = computed(() => ALL_FLAVOR_COLUMNS
+  .filter(c => !props.designRefresh || !props.allowedZones.length || c.name !== 'az')
+  .map(c => props.configurationOnly ? { ...c, label: ({ vcpu: 'vCPU', ram: 'RAM', disk: 'Volume', pricing: 'Price' })[c.name] || c.label } : c))
+const filterOptions = (values, label) => [{ value: '', label }, ...values.map(v => ({ value: String(v), label: String(v) }))]
+const vcpuFilterOptions = computed(() => filterOptions(vcpuOptions, props.configurationOnly ? 'All' : 'vCPU: All'))
+const memoryFilterOptions = computed(() => filterOptions(memOptions, props.configurationOnly ? 'All' : 'RAM: All'))
+function bumpRoot(amount) {
+  props.pool.rootDisk = Math.min(ROOT_DISK_MAX, Math.max(ROOT_DISK_MIN, (+props.pool.rootDisk || ROOT_DISK_MIN) + amount))
+}
 /* single flavor per pool — picking another replaces the current one */
 function toggleFlavor(f) {
   const spec = props.pool.specs[0]
-  if (spec && spec.flavorId === f.id) props.pool.specs = []
+  if (spec && spec.flavorId === f.id) {
+    if (!props.designRefresh) props.pool.specs = []
+  }
   else props.pool.specs = [{ flavorId: f.id, zones: availableZones(f) }]
 }
 function specSelected(f) {
@@ -242,9 +271,9 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 </script>
 
 <template>
-  <div class="pool-card" :class="{ open, invalid: !ok }">
+  <div class="pool-card" :class="{ open, invalid: !ok && !configurationOnly, 'design-refresh': designRefresh, 'configuration-only': configurationOnly }">
     <!-- ======== header (always visible) ======== -->
-    <div class="pool-head" role="button" :aria-expanded="open" tabindex="0"
+    <div v-if="!configurationOnly" class="pool-head" role="button" :aria-expanded="open" tabindex="0"
       @click="emit('toggle')"
       @keydown.enter.prevent="emit('toggle')"
     >
@@ -255,16 +284,17 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         :class="{ flip: open }"
       />
       <div class="pool-titles">
-        <span class="pool-name text-body-1-strong">{{ displayName }}</span>
+        <span class="pool-name text-body-1-strong">{{ designRefresh ? `Node Pool ${index + 1}` : displayName }}</span>
         <span
-          v-if="!open"
+          v-if="!open && !designRefresh"
           class="pool-sub text-caption-1"
           :class="{ 'err-sub': !ok }"
         >{{ !ok ? `Missing: ${missingShort}` : summary }}</span>
       </div>
       <ArBadge
         v-if="!open && !ok"
-        variant="danger"
+        :variant="designRefresh ? 'warning' : 'danger'"
+        prepend-icon="warning"
         size="sm"
         pill
         text="Incomplete"
@@ -276,7 +306,9 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         pill
         text="Complete"
       />
+      <ArLinkButton v-if="designRefresh" class="delete-pool-link" prepend-icon="trash" @click.stop="onDelete">{{ confirmDelete ? 'Confirm delete?' : 'Delete' }}</ArLinkButton>
       <button
+        v-else
         class="pool-del"
         :class="{ confirm: confirmDelete }"
         :aria-label="confirmDelete ? 'Confirm delete' : 'Delete pool'"
@@ -296,9 +328,10 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       v-show="open"
       class="pool-body"
     >
-      <div class="flex gap-4 flex-wrap">
+      <div v-if="!configurationOnly" class="flex gap-4 flex-wrap">
         <ArField
-          label="Pool Name"
+          :label="designRefresh ? 'Node Pool Name' : 'Pool Name'"
+          :required="designRefresh"
           class="pool-name-field"
           :error="Boolean(pool.name) && !nameOk"
           :message="pool.name && !nameOk ? 'Lowercase letters, digits and dashes. 3–40 characters.' : ''"
@@ -311,7 +344,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
             style="text-transform: lowercase"
           />
         </ArField>
-        <div class="ar-field" style="width: 170px">
+        <div v-if="!designRefresh" class="ar-field" style="width: 170px">
           <label>Node Count<span class="req">*</span></label>
           <div class="count-ctl" :class="{ 'error-mode': pool.count === '' || pool.count < 1 || pool.count > 20 }">
             <button type="button" aria-label="Decrease node count" :disabled="pool.count <= 1" @click="bumpCount(-1)">−</button>
@@ -322,45 +355,41 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         </div>
       </div>
 
-      <!-- flavor filters -->
-      <div class="flavor-filter">
-        <div class="ar-field" style="width: 130px">
-          <label>vCPUs</label>
+      <!-- category and filters share the same catalog in both variants -->
+      <ArTab v-if="designRefresh" v-model="fCat" :items="FLAVOR_CATEGORIES" />
+      <span v-if="designRefresh" class="text-body-2">Filters</span>
+      <div class="flavor-filter" :class="{ 'design-filters': designRefresh }">
+        <ArField :label="designRefresh ? '' : 'vCPUs'">
           <ArSelect
-            v-model="fVcpu"
-            :options="[{ value: '', label: 'All' }, ...vcpuOptions.map((v) => ({ value: String(v), label: String(v) }))]"
-            aria-label="vCPUs"
+            :model-value="designRefresh ? vcpuFilterOptions.find(v => v.value === fVcpu) : fVcpu"
+            :options="designRefresh ? vcpuFilterOptions : filterOptions(vcpuOptions, 'All')"
+            track-by="value"
+            :allow-empty="false"
+            aria-label="vCPU"
+            @update:model-value="fVcpu = designRefresh ? $event.value : $event"
           />
-        </div>
-        <div class="ar-field" style="width: 130px">
-          <label>Memory</label>
+        </ArField>
+        <ArField :label="designRefresh ? '' : 'Memory'">
           <ArSelect
-            v-model="fMem"
-            :options="[{ value: '', label: 'All' }, ...memOptions.map((m) => ({ value: String(m), label: String(m) }))]"
-            aria-label="Memory"
+            :model-value="designRefresh ? memoryFilterOptions.find(v => v.value === fMem) : fMem"
+            :options="designRefresh ? memoryFilterOptions : filterOptions(memOptions, 'All')"
+            track-by="value"
+            :allow-empty="false"
+            aria-label="RAM"
+            @update:model-value="fMem = designRefresh ? $event.value : $event"
           />
-        </div>
-        <div class="ar-field" style="width: 150px">
-          <label>AZ</label>
-          <ArSelect
-            v-model="fAz"
-            :options="[{ value: '', label: 'All' }, ...poolZones.map((z) => ({ value: z, label: zoneName(z) }))]"
-            aria-label="AZ"
-          />
-        </div>
+        </ArField>
+        <ArField v-if="!designRefresh" label="AZ">
+          <ArSelect v-model="fAz" :options="[{ value: '', label: 'All' }, ...poolZones.map(z => ({ value: z, label: zoneName(z) }))]" aria-label="AZ" />
+        </ArField>
       </div>
-
-      <ArTab
-        v-model="fCat"
-        flat
-        :items="FLAVOR_CATEGORIES"
-      />
+      <ArTab v-if="!designRefresh" v-model="fCat" flat :items="FLAVOR_CATEGORIES" />
+      <span v-if="designRefresh && !configurationOnly" class="text-body-2">Flavor</span>
 
       <!-- flavor table -->
       <ArTable
         :columns="FLAVOR_COLUMNS"
         :items="pagedFlavors"
-        key-field="id"
         class="flavor-table"
       >
         <template #row="f">
@@ -371,19 +400,24 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
             @click="!allZonesSoldOut(f) && toggleFlavor(f)"
           >
             <ArTableCell @click.stop>
+              <UIKit.ArRadio v-if="designRefresh" :model-value="pool.specs[0]?.flavorId || ''" :value="f.id" :disabled="allZonesSoldOut(f)" @update:model-value="toggleFlavor(f)" />
               <ArRadioDot
+                v-else
                 :model-value="specSelected(f)"
                 :disabled="allZonesSoldOut(f)"
                 @update:model-value="toggleFlavor(f)"
               />
             </ArTableCell>
             <ArTableCell class="mono cell-main">{{ f.id }}</ArTableCell>
-            <ArTableCell :class="{ muted: f.azs.some((z) => z.soldOut) }">{{ azCell(f) }}</ArTableCell>
-            <ArTableCell>{{ f.vcpu }}</ArTableCell>
-            <ArTableCell>{{ f.ram }} GiB</ArTableCell>
+            <ArTableCell v-if="!designRefresh || !allowedZones.length" :class="{ muted: f.azs.some(z => z.soldOut) }">
+              <template v-if="designRefresh"><span v-for="z in flavorZones(f)" :key="z.id" class="az-cell-label">{{ zoneName(z.id) }}</span></template>
+              <template v-else>{{ azCell(f) }}</template>
+            </ArTableCell>
+            <ArTableCell>{{ f.vcpu }}{{ configurationOnly ? ' Core' : '' }}</ArTableCell>
+            <ArTableCell>{{ f.ram }} {{ configurationOnly ? 'GB' : 'GiB' }}</ArTableCell>
             <ArTableCell>25 GB</ArTableCell>
             <ArTableCell class="muted">{{ f.bandwidth.split(' / ').pop() }}</ArTableCell>
-            <ArTableCell class="text-body-2-strong">{{ fmtIRR(Math.round(f.pricePerHour * 730)) }} IRR/month</ArTableCell>
+            <ArTableCell class="text-body-2-strong">{{ fmtIRR(Math.round(f.pricePerHour * (designRefresh ? 24 : 730))) }} IRR/{{ designRefresh ? 'Day' : 'month' }}</ArTableCell>
           </ArTableRow>
         </template>
         <template #noContent>
@@ -391,7 +425,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         </template>
       </ArTable>
 
-      <div class="flex space-between align-items-center">
+      <div v-if="!designRefresh || totalPages > 1" class="flex space-between align-items-center">
         <span class="text-caption-1 muted">
           Showing {{ filteredFlavors.length ? (page - 1) * perPage + 1 : 0 }}–{{ Math.min(page * perPage, filteredFlavors.length) }} of {{ filteredFlavors.length }}
         </span>
@@ -405,7 +439,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       <!-- selected specification — zone chips instead of the old nested table
            (user testing: the table-based AZ selection was confusing) -->
       <div
-        v-if="pool.specs.length"
+        v-if="pool.specs.length && !designRefresh"
         class="spec-box"
       >
         <h4 class="text-body-1 spec-title">Selected Specification</h4>
@@ -457,20 +491,43 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
         </p>
       </div>
 
-      <!-- root disk — per-pool root volume size in GB; the stepper sits
-           beside the title (panel's Root Volume control, without the type select) -->
-      <div class="root-disk-box">
+      <template v-if="designRefresh">
+        <div v-if="!allowedZones.length" class="creation-azs">
+          <span class="text-body-2">{{ configurationOnly ? 'Node Creation AZs' : 'AZs for Node Creation' }}<span v-if="configurationOnly" class="required-mark">*</span></span>
+          <div class="creation-az-options">
+            <ArCheckbox v-for="z in REGION.zones" :key="z.id" :label="z.name"
+              :model-value="Boolean(pool.specs[0]?.zones.includes(z.id))"
+              :disabled="!selectedFlavor || !selectedFlavor.azs.some(a => a.id === z.id && !a.soldOut)"
+              @update:model-value="specToggleZone(z.id, selectedFlavor)" />
+          </div>
+          <UIKit.ArAlert type="info" icon="info" description="AZs may be disabled when no capacity is available." />
+        </div>
+        <ArField label="Root Volume" :error="!Number.isInteger(pool.rootDisk) || pool.rootDisk < ROOT_DISK_MIN || pool.rootDisk > ROOT_DISK_MAX">
+          <div class="volume-row">
+            <div class="number-stepper">
+              <ArButton variant="ghost" icon="minus" :disabled="pool.rootDisk <= ROOT_DISK_MIN" aria-label="Decrease root volume" @click="bumpRoot(-1)" />
+              <ArInput :model-value="pool.rootDisk" inputmode="numeric" aria-label="Root volume" @update:model-value="pool.rootDisk = /^\d+$/.test($event) ? +$event : ''" @focusout="bumpRoot(0)" />
+              <ArButton variant="ghost" icon="plus" :disabled="pool.rootDisk >= ROOT_DISK_MAX" aria-label="Increase root volume" @click="bumpRoot(1)" />
+            </div>
+            <span class="volume-spec">IOPS: 1000</span><span class="volume-spec">Bandwidth: 15 MB/S</span>
+          </div>
+        </ArField>
+        <ArField label="Node Count" message="1–20 nodes per pool." :error="!Number.isInteger(pool.count) || pool.count < 1 || pool.count > 20">
+          <div class="number-stepper">
+            <ArButton variant="ghost" icon="minus" :disabled="pool.count <= 1" aria-label="Decrease node count" @click="bumpCount(-1)" />
+            <ArInput :model-value="pool.count" inputmode="numeric" aria-label="Node count" @update:model-value="pool.count = /^\d+$/.test($event) ? +$event : ''" @focusout="bumpCount(0)" />
+            <ArButton variant="ghost" icon="plus" :disabled="pool.count >= 20" aria-label="Increase node count" @click="bumpCount(1)" />
+          </div>
+        </ArField>
+      </template>
+      <div v-else class="root-disk-box">
         <h4 class="text-body-1 root-disk-title">Root Disk</h4>
-        <ArRangeSliderInput
-          v-model="pool.rootDisk"
-          :min="ROOT_DISK_MIN"
-          :max="ROOT_DISK_MAX"
-          class="root-disk-ctl"
-        />
+        <ArRangeSliderInput v-model="pool.rootDisk" :min="ROOT_DISK_MIN" :max="ROOT_DISK_MAX" class="root-disk-ctl" />
       </div>
 
       <!-- advanced settings (optional) -->
       <button
+        v-if="!designRefresh"
         class="adv-toggle"
         @click="advOpen = !advOpen"
       >
@@ -644,6 +701,30 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 </template>
 
 <style scoped>
+.configuration-only.pool-card { border: 0; border-radius: 0; overflow: visible; }
+.configuration-only.design-refresh .pool-body { padding: 0; border-top: 0; }
+.configuration-only .az-cell-label { background: var(--bg-neutral-t1-3-default); padding: 0 2px; margin-bottom: 2px; }
+.configuration-only .flavor-table { border: 1px solid var(--st-neutral-t1-5-default); border-radius: 8px; padding: 16px; }
+.configuration-only .flavor-row.selected { background: transparent; }
+.configuration-only .flavor-row > :last-child { white-space: nowrap; text-decoration: underline; }
+@media (max-width: 540px) { .configuration-only.design-refresh .design-filters { grid-template-columns: minmax(0, 1fr); } .configuration-only .flavor-table { padding: 8px; } }
+.required-mark { color: var(--fg-error-t1-1-default); margin-left: 2px; }
+.design-refresh .pool-name-field { width: 100%; max-width: none; min-width: 0; }
+.design-refresh .pool-sub { display: none; }
+.design-refresh .pool-head { padding: 24px; }
+.delete-pool-link { color: var(--fg-error-t1-1-default); }
+.design-refresh .pool-body { padding: 24px; gap: 16px; }
+.design-refresh .design-filters { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 16px; }
+.design-refresh .design-filters > * { min-width: 0; width: auto; }
+.creation-azs { display: flex; flex-direction: column; gap: 12px; }
+.creation-az-options { display: flex; flex-wrap: wrap; gap: 20px; }
+.az-cell-label { display: block; width: max-content; font-size: 12px; }
+.number-stepper { display: flex; align-items: center; width: 200px; border: 1px solid var(--st-neutral-t1-4-default); border-radius: 8px; }
+.number-stepper :deep([class$="-ArInput"]) { min-width: 0; flex: 1; --inputBorder: transparent; }
+.number-stepper :deep(input) { text-align: center; padding: 0; }
+.volume-row { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.volume-spec { background: var(--bg-neutral-t1-3-default); color: var(--fg-neutral-t1-3-default); font-size: 12px; padding: 2px 4px; }
+
 .pool-card {
   border: 1px solid var(--st-neutral-t1-5-default);
   border-radius: var(--radius-lg, var(--radius-md));

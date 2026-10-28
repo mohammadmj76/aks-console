@@ -3,10 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store } from '../store'
 import { FLAVOR_CATALOG, VOLUME_PRICE_PER_GB, fmtIRR } from '../data'
-import ActionMenu from './ui/ActionMenu.vue'
-import ArModal from './ui/ArModal.vue'
-import ArBadge from './ui/ArBadge.vue'
-import ArButton from './ui/ArButton.vue'
+import { ArAlert, ArButton, ArButtonMenu, ArField, ArIcon, ArInput, ArModal, ArTag } from '../uikit'
 
 /*
  * The node-pool "…" menu and its management panels (adjust node count /
@@ -22,14 +19,20 @@ const route = useRoute()
 const router = useRouter()
 
 const items = computed(() => [
-  { label: 'Adjust node count', action: 'resize', disabled: props.cluster.status !== 'running' },
-  { label: 'Rename', action: 'rename' },
-  { label: 'Edit labels', action: 'labels' },
-  { sep: true },
-  { label: 'Delete node pool', danger: true, disabled: props.cluster.pools.length <= 1, action: 'delete' },
+  { items: [
+    { id: 'resize', title: 'Adjust node count', disabled: props.cluster.status !== 'running' },
+    { id: 'rename', title: 'Rename' },
+    { id: 'labels', title: 'Edit labels' },
+  ] },
+  { items: [{ id: 'delete', title: 'Delete node pool', variant: 'delete', disabled: props.cluster.pools.length <= 1 }] },
 ])
 
 const panel = ref('') // '' | 'resize' | 'rename' | 'labels' | 'delete'
+const panelOpen = (name) => computed({ get: () => panel.value === name, set: (open) => { if (!open && panel.value === name) panel.value = '' } })
+const resizeOpen = panelOpen('resize')
+const renameOpen = panelOpen('rename')
+const labelsOpen = panelOpen('labels')
+const deleteOpen = panelOpen('delete')
 
 /* ---------------- adjust node count ---------------- */
 const countForm = reactive({ count: 0 })
@@ -38,10 +41,9 @@ function bumpCount(d) {
   const cur = +countForm.count || 0
   countForm.count = Math.min(20, Math.max(1, cur + d))
 }
-function countInput(e) {
-  const v = e.target.value.replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '').slice(0, 2)
+function countInput(value) {
+  const v = String(value).replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '').slice(0, 2)
   countForm.count = v === '' ? '' : +v
-  e.target.value = countForm.count
 }
 const poolFlavors = computed(() =>
   (props.pool.specs || []).map((s) => FLAVOR_CATALOG.find((f) => f.id === s.flavorId)).filter(Boolean)
@@ -106,6 +108,7 @@ function saveLabels() {
 
 /* ---------------- delete (confirm, then navigate back if on the pool page) ---------------- */
 function doDelete() {
+  if (props.cluster.pools.length <= 1) return
   const cid = props.cluster.id
   store.removePool(props.cluster, props.pool)
   panel.value = ''
@@ -113,40 +116,38 @@ function doDelete() {
 }
 
 function onSelect(item) {
-  if (item.action === 'resize') countForm.count = props.pool.count
-  if (item.action === 'rename') renameForm.name = props.pool.name
-  if (item.action === 'labels') {
+  if (item.id === 'resize') countForm.count = props.pool.count
+  if (item.id === 'rename') renameForm.name = props.pool.name
+  if (item.id === 'labels') {
     labelsForm.list = [...(props.pool.labels || [])]
     labelsForm.input = ''
   }
-  panel.value = item.action
+  panel.value = item.id
 }
 </script>
 
 <template>
-  <ActionMenu :items="items" @select="onSelect" />
+  <ArButtonMenu class="pool-actions" variant="ghost" aria-label="Node pool actions" :items="items" menu-position="bottom-end" @item-clicked="onSelect">
+    <ArIcon name="ellipsis" />
+  </ArButtonMenu>
 
   <!-- ===== Adjust node count ===== -->
   <ArModal
-    :open="panel === 'resize'"
+    v-model="resizeOpen"
     title="Adjust node count"
-    :subtitle="`${cluster.name} · ${pool.name}`"
-    :width="440"
-    @close="panel = ''"
+    :caption="`${cluster.name} · ${pool.name}`"
   >
     <p class="text-body-2 muted" style="margin: 0">
       Nodes are added or removed manually — autoscaling is not available.
     </p>
 
-    <div class="ar-field">
-      <label>Nodes</label>
-      <div class="count-input" :class="{ 'error-mode': !countOk }">
-        <button :disabled="countForm.count <= 1" aria-label="Decrease node count" @click="bumpCount(-1)">−</button>
-        <input :value="countForm.count" inputmode="numeric" aria-label="Node count" @input="countInput" @blur="bumpCount(0)" />
-        <button :disabled="countForm.count >= 20" aria-label="Increase node count" @click="bumpCount(1)">+</button>
+    <ArField class="pool-actions__field" label="Nodes" :error="!countOk" message="1–20 nodes per pool. New nodes join from the pool's subnets; removed nodes drain their workloads first.">
+      <div class="pool-actions__count">
+        <ArButton variant="secondary" icon="minus" :disabled="countForm.count <= 1" aria-label="Decrease node count" @click="bumpCount(-1)" />
+        <ArInput :model-value="countForm.count" inputmode="numeric" aria-label="Node count" @update:model-value="countInput" @focusout="bumpCount(0)" />
+        <ArButton variant="secondary" icon="plus" :disabled="countForm.count >= 20" aria-label="Increase node count" @click="bumpCount(1)" />
       </div>
-      <span class="hint">1–20 nodes per pool. New nodes join from the pool's subnets; removed nodes drain their workloads first.</span>
-    </div>
+    </ArField>
 
     <div class="rs-cost">
       <span class="rs-k">Estimated pool cost at {{ countForm.count || '…' }} node{{ countForm.count === 1 ? '' : 's' }}</span>
@@ -165,21 +166,13 @@ function onSelect(item) {
 
   <!-- ===== Rename ===== -->
   <ArModal
-    :open="panel === 'rename'"
+    v-model="renameOpen"
     title="Rename node pool"
-    :subtitle="`${cluster.name} · ${pool.name}`"
-    :width="420"
-    @close="panel = ''"
+    :caption="`${cluster.name} · ${pool.name}`"
   >
-    <div class="ar-field" style="margin: 0">
-      <label>Pool name<span class="req">*</span></label>
-      <div class="ar-input" :class="{ 'error-mode': renameForm.name && !renameOk }">
-        <input v-model="renameForm.name" placeholder="e.g. worker-pool" spellcheck="false" style="text-transform: lowercase" @keyup.enter="saveRename" />
-      </div>
-      <span v-if="renameForm.name && !POOL_NAME.test(renameForm.name)" class="error-text">Lowercase letters, digits and dashes. 3–40 characters.</span>
-      <span v-else-if="renameForm.name && !renameOk" class="error-text">A pool with this name already exists in this cluster.</span>
-      <span v-else class="hint">Lowercase letters, digits and dashes. 3–40 characters.</span>
-    </div>
+    <ArField label="Pool name" required :error="Boolean(renameForm.name) && !renameOk" :message="POOL_NAME.test(renameForm.name) && !renameOk ? 'A pool with this name already exists in this cluster.' : 'Lowercase letters, digits and dashes. 3–40 characters.'">
+      <ArInput v-model="renameForm.name" aria-label="Pool name" placeholder="e.g. worker-pool" spellcheck="false" @keyup.enter="saveRename" />
+    </ArField>
     <template #footer>
       <ArButton variant="tertiary" @click="panel = ''">Cancel</ArButton>
       <ArButton variant="primary" :disabled="!renameOk || renameForm.name === pool.name" @click="saveRename">Save changes</ArButton>
@@ -188,26 +181,16 @@ function onSelect(item) {
 
   <!-- ===== Edit labels ===== -->
   <ArModal
-    :open="panel === 'labels'"
+    v-model="labelsOpen"
     title="Edit labels"
-    :subtitle="`${cluster.name} · ${pool.name}`"
-    :width="460"
-    @close="panel = ''"
+    :caption="`${cluster.name} · ${pool.name}`"
   >
-    <div class="ar-field" style="margin: 0">
-      <label>Node labels</label>
-      <div class="tagbox">
-        <ArBadge v-for="l in labelsForm.list" :key="l" variant="neutral">
-          {{ l }}
-          <button class="tag-x" aria-label="Remove label" @click="removeLabel(l)">
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 8 8M12 4l-8 8"/></svg>
-          </button>
-        </ArBadge>
-        <input v-model="labelsForm.input" placeholder="key=value" spellcheck="false" @keydown.enter.prevent="addLabel" />
+    <ArField label="Node labels" :error="labelsForm.list.length > 0 && !labelsOk" :message="labelsOk ? 'Applied to every node. Press Enter after each key=value label. Up to 20 labels.' : 'Use key=value with lowercase keys and values up to 63 characters.'">
+      <ArInput v-model="labelsForm.input" placeholder="key=value" aria-label="Node label" spellcheck="false" @keydown.enter.prevent="addLabel" />
+      <div class="pool-actions__tags">
+        <ArTag v-for="label in labelsForm.list" :key="label" :aria-label="`Remove ${label}`" @click="removeLabel(label)">{{ label }}</ArTag>
       </div>
-      <span v-if="labelsForm.list.length && !labelsOk" class="error-text">Use key=value — lowercase keys (letters, digits, -, .), values up to 63 characters.</span>
-      <span v-else class="hint">Applied as Kubernetes labels to every node of this pool. Press Enter after each label. Up to 20.</span>
-    </div>
+    </ArField>
     <template #footer>
       <ArButton variant="tertiary" @click="panel = ''">Cancel</ArButton>
       <ArButton variant="primary" :disabled="!labelsOk" @click="saveLabels">Save changes</ArButton>
@@ -216,19 +199,14 @@ function onSelect(item) {
 
   <!-- ===== Delete confirm ===== -->
   <ArModal
-    :open="panel === 'delete'"
+    v-model="deleteOpen"
     title="Delete node pool"
-    :subtitle="`${cluster.name} · ${pool.name}`"
-    :width="420"
-    @close="panel = ''"
+    :caption="`${cluster.name} · ${pool.name}`"
   >
-    <div class="banner error" style="margin: 0">
-      <svg style="flex: none" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 5.2v3.4M8 11.4v.2"/><circle cx="8" cy="8" r="6.2"/></svg>
-      <span>Deleting this pool removes its {{ pool.count }} node{{ pool.count === 1 ? '' : 's' }} and their root volumes. Workloads running on these nodes are evicted. This cannot be undone.</span>
-    </div>
+    <ArAlert type="danger" icon="warning" :description="`Deleting this pool removes its ${pool.count} nodes and their root volumes. Workloads running on these nodes are evicted. This cannot be undone.`" />
     <template #footer>
       <ArButton variant="tertiary" @click="panel = ''">Cancel</ArButton>
-      <ArButton variant="danger" @click="doDelete">Delete node pool</ArButton>
+      <ArButton variant="primary-danger" @click="doDelete">Delete node pool</ArButton>
     </template>
   </ArModal>
 </template>
@@ -246,9 +224,11 @@ function onSelect(item) {
 .rs-unit { font-size: 13px; font-weight: 325; color: var(--fg-neutral-t1-3-default); }
 .rs-sub { font-size: 12.5px; color: var(--fg-neutral-t1-3-default); }
 .rs-plan { font-size: 13px; color: var(--fg-neutral-t1-2-default); }
-/* the modal body is a flex column, which blockifies and stretches the
-   inline-flex .count-input — pin it to its natural width (matches the
-   compact node-count control on the pool cards) */
-.count-input { width: fit-content; }
-.count-input.error-mode { border-color: var(--bg-error-t3-1-default); }
+.pool-actions :deep(.v11-1-0-ArButton) { padding: 0; width: 32px; height: 32px; }
+.pool-actions :deep(.v11-1-0-ArButton__icon) { display: none; }
+.pool-actions :deep(.v11-1-0-ArButton__content) { margin: 0; }
+.pool-actions__field { margin: 16px 0; }
+.pool-actions__count { display: flex; gap: 8px; width: 200px; }
+.pool-actions__count > :nth-child(2) { flex: 1; min-width: 0; }
+.pool-actions__tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 </style>

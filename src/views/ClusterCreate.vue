@@ -6,24 +6,11 @@ import {
   REGIONS, REGION, VERSIONS, CP_PLANS, FLAVOR_CATALOG,
   VPCS, VOLUME_PRICE_PER_GB, fmtIRR,
 } from '../data'
-import ArButton from '../components/ui/ArButton.vue'
-import ArBadge from '../components/ui/ArBadge.vue'
-import ArCheckbox from '../components/ui/ArCheckbox.vue'
-import ArRadioDot from '../components/ui/ArRadioDot.vue'
-import ArSelect from '../components/ui/ArSelect.vue'
-import ArSection from '../components/ui/ArSection.vue'
-import ArField from '../components/ui/ArField.vue'
-import ArInput from '../components/ui/ArInput.vue'
-import ArAlert from '../components/ui/ArAlert.vue'
-import ArTag from '../components/ui/ArTag.vue'
-import ArCard from '../components/ui/ArCard.vue'
-import ArRadioGroup from '../components/ui/ArRadioGroup.vue'
-import ArRadio from '../components/ui/ArRadio.vue'
-import ArLinkButton from '../components/ui/ArLinkButton.vue'
-import ArTable from '../components/ui/ArTable.vue'
-import ArTableRow from '../components/ui/ArTableRow.vue'
-import ArTableCell from '../components/ui/ArTableCell.vue'
-import ArIcon from '../components/ui/ArIcon.vue'
+import {
+    ArButton, ArBadge, ArCheckbox, ArSelect, ArSection, ArField,
+    ArInput, ArAlert, ArTag, ArCard, ArRadio, ArLinkButton,
+    ArTable, ArTableRow, ArTableCell, ArIcon, ArTab,
+} from '../uikit'
 import PoolCard from '../components/create/PoolCard.vue'
 
 const router = useRouter()
@@ -50,7 +37,7 @@ const draft = reactive({
     name: '',
     labels: [],
     version: VERSIONS.find((v) => v.default).id,
-    cp: { plan: 'medium' },
+    cp: { plan: 'xsmall' },
     vpcId: '',
     subnetIds: [],
     podCidrs: [{ o1: '172', o2: '16', o3: '0', o4: '0', prefix: '16' }],
@@ -58,8 +45,7 @@ const draft = reactive({
     pools: [], // up to 3 — same accordion cards as the stepper flow
 })
 
-/* pool factory — new pools copy the credentials of the first pool
-   (same-as-pool-1 default; each pool can still override) */
+/* New pools copy the first pool's operating system and root volume. */
 let poolSeq = 0
 function makePool(from) {
     poolSeq++
@@ -94,7 +80,24 @@ function removePool(id) {
 
 /* ---------------- master distribution ---------------- */
 const masterDist = ref('automatic')
-const masterHostAz = ref('foroogh')
+const masterHostAz = ref('bamdad')
+const planView = ref('Table')
+const versionOptions = VERSIONS.map(v => ({ value: v.id, label: `${v.patch} (End Of Cycle: ${v.endOfCycle})` }))
+const vpcOptions = VPCS.map(v => ({ value: v.id, label: `${v.name} (${v.cidr})` }))
+const selectedVersion = computed(() => versionOptions.find(v => v.value === draft.version))
+const selectedVpc = computed(() => vpcOptions.find(v => v.value === draft.vpcId))
+const visibleSubnets = computed(() => masterDist.value === 'custom' ? singleAzSubnets.value : (vpc.value?.subnets || []))
+const PLAN_COLUMNS = [
+    { name: 'pick', label: '' }, { name: 'type', label: 'Type' },
+    { name: 'replicas', label: 'Replica' }, { name: 'nodes', label: 'Max Node' },
+    { name: 'etcd', label: 'Max Etcd Size' }, { name: 'price', label: 'Price' },
+]
+function refreshNetwork() {
+    store.toast('info', 'Network refreshed', 'Showing the current prototype network catalog.')
+}
+function createSubnet() {
+    store.toast('info', 'Create Subnet', 'Subnet creation is not connected in this prototype.')
+}
 const masterAzsOk = computed(() => masterDist.value === 'automatic' || masterHostAz.value !== '')
 /* Single AZ clusters host their worker nodes in the master's AZ too */
 const poolAllowedZones = computed(() => (masterDist.value === 'custom' ? [masterHostAz.value] : []))
@@ -141,12 +144,6 @@ const subnetOk = computed(() => {
     if (masterDist.value !== 'automatic') return true
     return missingAzSubnets.value.length === 0
 })
-const subnetMessage = computed(() => {
-    if (masterDist.value === 'custom') {
-        return `Single AZ deployment — select one subnet in ${REGION.zones.find((z) => z.id === masterHostAz.value)?.name}. Subnets in other AZs are locked.`
-    }
-    return 'Pick one subnet per availability zone you want worker nodes in.'
-})
 const subnetError = computed(() => {
     if (masterDist.value === 'custom' && vpc.value && !singleAzSubnets.value.length) {
         return `No subnet in ${REGION.zones.find((z) => z.id === masterHostAz.value)?.name} for this VPC — choose a different AZ or VPC.`
@@ -172,6 +169,7 @@ function poolOk(p, i, all) {
     if (all.some((o, j) => j !== i && poolNameOf(o, j) === nm)) return false
     if (p.specs.length !== 1 || !p.specs[0].zones.length) return false
     if (!(Number.isInteger(p.count) && p.count >= 1 && p.count <= 20)) return false
+    if (!(Number.isInteger(p.rootDisk) && p.rootDisk >= 25 && p.rootDisk <= 1000)) return false
     if (!p.labels.every((l) => {
         const [k, v] = l.split('=')
         return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v) && k.length <= 63 && v.length <= 63
@@ -191,7 +189,7 @@ const price = computed(() => {
         const f = FLAVOR_CATALOG.find((x) => x.id === p.specs[0]?.flavorId)
         if (!f) continue
         nodesCost += Math.round(f.pricePerHour * 730) * p.count
-        volumeCost += VOLUME_PRICE_PER_GB * 50 * p.count
+        volumeCost += VOLUME_PRICE_PER_GB * p.rootDisk * p.count
     }
     const total = cpCost + nodesCost + volumeCost
     return {
@@ -343,6 +341,7 @@ const SUBNET_COLUMNS = [
     { label: 'Name', name: 'name' },
     { label: 'IPv4 CIDR', name: 'cidr' },
     { label: 'AZ', name: 'zone' },
+    { label: 'Network Gateway', name: 'gateway' },
     { label: 'Status', name: 'status' },
 ]
 
@@ -356,7 +355,12 @@ function create() {
             name: draft.name,
             labels: [...draft.labels],
             version: draft.version,
-            cp: { plan: draft.cp.plan, ha: true },
+            cp: {
+                plan: draft.cp.plan,
+                ha: true,
+                distribution: masterDist.value === 'automatic' ? 'multi-az' : 'single-az',
+                zone: masterDist.value === 'custom' ? masterHostAz.value : null,
+            },
             regionId: regionId.value,
             vpcId: draft.vpcId,
             subnetIds: [...draft.subnetIds],
@@ -369,6 +373,7 @@ function create() {
                 count: p.count,
                 specs: JSON.parse(JSON.stringify(p.specs)),
                 image: p.image,
+                rootDisk: p.rootDisk,
                 labels: [...p.labels],
                 taints: p.taints.filter((t) => t.key).map((t) => ({ ...t })),
             })),
@@ -384,30 +389,66 @@ function create() {
     <main class="page page-wide">
         <div class="page-header">
             <div class="title-row">
-                <router-link
-                    to="/clusters"
-                    class="ar-btn ghost icon"
-                    aria-label="Back"
-                    style="text-decoration: none"
-                >
-                    <ArIcon
-                        name="chevron-left"
-                        size="sm"
-                    />
-                </router-link>
+                <ArButton variant="ghost" icon="chevron-left" aria-label="Back to clusters" @click="router.push('/clusters')" />
                 <h1 class="text-title-2 m-0">Create Kubernetes Cluster</h1>
-                <ArLinkButton
-                    :to="{ path: '/clusters/create', query: { flow: 'stepper' } }"
-                    class="flow-link"
-                    append-icon="chevron-right"
-                >
-                    Try the two-step flow
-                </ArLinkButton>
+
             </div>
         </div>
 
         <div class="wizard-grid">
             <div class="wizard-main create-sections">
+                <!-- ================= BASIC INFO ================= -->
+                <ArSection title="Basic Info">
+                    <div class="flex flex-column gap-4">
+                        <ArField
+                            label="Name"
+                            required
+                            :message="nameMessage"
+                            :error="Boolean(draft.name) && !nameOk"
+                        >
+                            <ArInput
+                                v-model="draft.name"
+                                placeholder="Enter a name"
+                                spellcheck="false"
+                                autocomplete="off"
+                                ltr
+                                style="text-transform: lowercase"
+                            />
+                        </ArField>
+
+                        <ArField
+                            label="Labels"
+                            :message="labelError"
+                            :error="Boolean(labelError)"
+                        >
+                            <!-- panel's tag input pattern: input with a separate
+                                 "+" button, hint below, then the added tags -->
+                            <div class="label-input-row">
+                                <ArInput
+                                    v-model="labelInput"
+                                    placeholder="Confirm labels with enter"
+                                    spellcheck="false"
+                                    @input="labelError = ''"
+                                    @keydown="onLabelKeydown"
+                                />
+                                <ArButton variant="secondary" icon="plus" aria-label="Add label" @click="addLabel()" />
+                            </div>
+                            <span class="field-hint text-caption-1 muted">After typing each label, press the Enter key.</span>
+                            <div v-if="draft.labels.length" class="label-tags">
+                                <ArTag
+                                    v-for="l in draft.labels"
+                                    :key="l"
+                                    class="mono"
+                                    @click="removeLabel(l)"
+                                >
+                                    {{ l }}
+                                </ArTag>
+                            </div>
+                        </ArField>
+                    </div>
+                </ArSection>
+
+
                 <!-- ================= REGION ================= -->
                 <ArSection
                     title="Region"
@@ -424,7 +465,7 @@ function create() {
                             :class="{ selected: regionId === r.id, disabled: !r.enabled }"
                             @update:model-value="selectRegion(r)"
                         >
-                            <span class="radio" />
+                            <ArRadio :value="r.id" :model-value="regionId" :disabled="!r.enabled" />
                             <div class="r-body">
                                 <div class="r-name">
                                     <span
@@ -453,6 +494,7 @@ function create() {
 
                     <ArAlert
                         type="info"
+                        icon="info"
                         class="margin-top-4"
                         description="Currently, only Iran Central is available for Kubernetes clusters."
                     />
@@ -460,8 +502,8 @@ function create() {
 
                 <!-- ================= CLUSTER TYPE (+ version) ================= -->
                 <ArSection
-                    title="Cluster Type"
-                    description="Choose cluster type based on your requirement."
+                    title="Cluster Configuration"
+                    description="Choose cluster configurations based on your requirement."
                 >
                     <div
                         class="ar-field-label-like flex align-items-center"
@@ -475,7 +517,20 @@ function create() {
                             class="info-icon"
                         />
                     </div>
-                    <div class="type-rows">
+                    <ArTab v-model="planView" :items="['Table', 'Card']" class="compact-tabs" />
+                    <ArTable v-if="planView === 'Table'" :columns="PLAN_COLUMNS" :items="CP_PLANS" class="plan-table">
+                        <template #row="p">
+                            <ArTableRow @click="selectType(p)">
+                                <ArTableCell><ArRadio :model-value="draft.cp.plan" :value="p.id" @update:model-value="selectType(p)" /></ArTableCell>
+                                <ArTableCell>{{ p.name }}</ArTableCell>
+                                <ArTableCell>{{ p.replicas }}</ArTableCell>
+                                <ArTableCell>{{ p.maxNodes }}</ArTableCell>
+                                <ArTableCell>{{ p.etcdSize }}</ArTableCell>
+                                <ArTableCell><span class="daily-price">{{ fmtIRR(p.pricePerDay) }} IRR/Day</span></ArTableCell>
+                            </ArTableRow>
+                        </template>
+                    </ArTable>
+                    <div v-else class="type-rows">
                         <ArCard
                             v-for="p in CP_PLANS"
                             :key="p.id"
@@ -485,7 +540,7 @@ function create() {
                             :class="{ selected: draft.cp.plan === p.id }"
                             @update:model-value="selectType(p)"
                         >
-                            <span class="radio" />
+                            <ArRadio :value="p.id" :model-value="draft.cp.plan" />
                             <div class="t-name text-body-1-strong">{{ p.name }}</div>
                             <div class="t-spec">
                                 <span class="ts-k text-caption-1">
@@ -525,7 +580,7 @@ function create() {
                             </div>
                             <div class="t-spec t-price">
                                 <span class="ts-k text-caption-1">Price</span>
-                                <span class="ts-v text-body-2-strong">{{ fmtIRR(p.pricePerDay * 30) }} IRR/Month</span>
+                                <span class="ts-v text-body-2-strong">{{ fmtIRR(p.pricePerDay) }} IRR/Day</span>
                             </div>
                         </ArCard>
                     </div>
@@ -541,38 +596,24 @@ function create() {
                                 class="info-icon"
                             />
                         </div>
-                        <ArRadioGroup
-                            v-model="masterDist"
-                            inline
-                        >
-                            <ArRadio
-                                value="automatic"
-                                label="Multi AZ"
-                            />
-                            <ArRadio
-                                value="custom"
-                                label="Single AZ"
-                            />
-                        </ArRadioGroup>
+                        <ArTab v-model="masterDist" :items="[{ key: 'automatic', title: 'Multi AZ' }, { key: 'custom', title: 'Single AZ' }]" class="compact-tabs" />
                         <template v-if="masterDist === 'custom'">
                             <div class="flex align-items-center gap-4 flex-wrap">
-                                <span class="text-body-2 muted">Select AZ</span>
-                                <ArRadioGroup
-                                    v-model="masterHostAz"
-                                    inline
-                                >
+                                <div class="az-radio-row">
                                     <ArRadio
-                                        v-for="z in REGION.zones"
+                                        v-for="z in [...REGION.zones].sort((a, b) => a.id === 'bamdad' ? -1 : b.id === 'bamdad' ? 1 : 0)"
                                         :key="z.id"
                                         :value="z.id"
+                                        v-model="masterHostAz"
+                                        name="control-plane-az"
                                         :label="z.name"
                                     />
-                                </ArRadioGroup>
+                                </div>
                             </div>
                         </template>
                     </div>
 
-                    <div class="flex flex-column gap-2 margin-top-6" style="max-width: 520px">
+                    <div class="flex flex-column gap-2 margin-top-6">
                         <ArField
                             label="Kubernetes Version"
                             required
@@ -580,8 +621,11 @@ function create() {
                             icon="info"
                         >
                             <ArSelect
-                                v-model="draft.version"
-                                :options="VERSIONS.map((v) => ({ value: v.id, label: `${v.patch} (end of cycle: ${v.endOfCycle})` }))"
+                                :model-value="selectedVersion"
+                                :options="versionOptions"
+                                track-by="value"
+                                :allow-empty="false"
+                                @update:model-value="draft.version = $event.value"
                                 aria-label="Kubernetes Version"
                             />
                         </ArField>
@@ -591,39 +635,40 @@ function create() {
                 <!-- ================= NETWORK ================= -->
                 <ArSection
                     title="Network"
-                    description="Set up the network for your cluster."
+                    description="The network that the cluster’s nodes use. Control plane nodes and worker nodes get their IP addresses from the VPC and subnets you select here."
                 >
                     <!-- Cluster Network -->
                     <div class="net-block">
-                        <div class="flex align-items-center net-title">
-                            <span class="text-body-1">Cluster Network</span>
-                            <ArIcon
-                                name="info"
-                                size="sm"
-                                v-tippy="{ ...TIPPY_TOP, content: NETWORK_TIPS.cluster }"
-                                class="info-icon"
-                            />
-                        </div>
                         <div class="flex flex-column gap-4">
                             <ArField label="VPC" required>
+                                <div class="vpc-control">
                                 <ArSelect
-                                    v-model="draft.vpcId"
-                                    :options="[{ value: '', label: 'Select a VPC…' }, ...VPCS.map((v) => ({ value: v.id, label: `${v.name} (${v.cidr})` }))]"
+                                    :model-value="selectedVpc"
+                                    :options="vpcOptions"
+                                    track-by="value"
+                                    placeholder="Select a VPC"
+                                    :allow-empty="false"
                                     aria-label="VPC"
-                                    @update:model-value="draft.subnetIds = []"
+                                    @update:model-value="draft.vpcId = $event.value; draft.subnetIds = []"
                                 />
+                                <ArButton variant="tertiary" icon="refresh" aria-label="Refresh VPCs" @click="refreshNetwork" />
+                                </div>
                             </ArField>
 
                             <ArField
                                 label="Subnet"
                                 required
-                                :message="subnetError || subnetMessage"
+                                :message="subnetError"
                                 :error="Boolean(subnetError)"
                                 :icon="subnetError ? 'warning' : 'info'"
                             >
+                                <div v-if="masterDist === 'custom'" class="subnet-actions">
+                                    <ArButton variant="tertiary" icon="refresh" aria-label="Refresh subnets" @click="refreshNetwork" />
+                                    <ArButton variant="secondary" prepend-icon="plus" @click="createSubnet">Create Subnet</ArButton>
+                                </div>
                                 <ArTable
                                     :columns="SUBNET_COLUMNS"
-                                    :items="vpc?.subnets || []"
+                                    :items="visibleSubnets"
                                 >
                                     <template #row="sn">
                                         <ArTableRow
@@ -636,9 +681,10 @@ function create() {
                                             @click="!subnetLocked(sn) && toggleSubnet(sn.id)"
                                         >
                                             <ArTableCell @click.stop>
-                                                <ArRadioDot
+                                                <ArRadio
                                                     v-if="masterDist === 'custom'"
-                                                    :model-value="draft.subnetIds.includes(sn.id)"
+                                                    :model-value="draft.subnetIds[0] || ''"
+                                                    :value="sn.id"
                                                     :disabled="subnetLocked(sn)"
                                                     @update:model-value="toggleSubnet(sn.id)"
                                                 />
@@ -649,16 +695,16 @@ function create() {
                                                 />
                                             </ArTableCell>
                                             <ArTableCell>
-                                                <a
-                                                    href="#"
-                                                    class="text-body-2-strong"
-                                                    @click.prevent.stop
-                                                >{{ sn.name }}</a>
+                                                <ArLinkButton @click.stop="toggleSubnet(sn.id)">{{ sn.name }}</ArLinkButton>
                                             </ArTableCell>
                                             <ArTableCell class="mono">
                                                 {{ sn.cidr }}
                                             </ArTableCell>
                                             <ArTableCell>{{ REGION.zones.find((z) => z.id === sn.zone)?.name }}</ArTableCell>
+                                            <ArTableCell>
+                                                <ArBadge v-if="sn.zone !== 'simin'" variant="success" prepend-icon="check-circle" text="Attached" />
+                                                <ArLinkButton v-else @click="store.toast('info', 'Network Gateway', 'Gateway configuration is not connected in this prototype.')">Enable</ArLinkButton>
+                                            </ArTableCell>
                                             <ArTableCell>
                                                 <ArBadge
                                                     variant="success"
@@ -747,6 +793,7 @@ function create() {
                             </p>
                             <ArAlert
                                 type="warning"
+                                icon="warning"
                                 description="CIDR block cannot be modified after the cluster is created. Ensure it does not overlap with the VPC and subnet CIDR blocks to prevent communication issues."
                             />
                             <ArAlert
@@ -829,6 +876,7 @@ function create() {
                             </p>
                             <ArAlert
                                 type="warning"
+                                icon="warning"
                                 description="CIDR block cannot be modified after the cluster is created. Ensure it does not overlap with the subnet CIDR blocks of dependent middleware (such as RDS and Redis) to prevent communication issues."
                             />
                             <ArAlert
@@ -844,13 +892,14 @@ function create() {
                 <!-- ================= NODE POOLS ================= -->
                 <ArSection
                     title="Node Pools"
-                    description="Configure up to 3 groups of nodes. Pools are optional — you can also add them after creation."
+                    description="Configure up to 3 pools of nodes."
                 >
                     <div class="pool-list">
                         <PoolCard
                             v-for="(p, i) in draft.pools"
                             :key="p.id"
                             :pool="p"
+                            design-refresh
                             :index="i"
                             :open="openId === p.id"
                             :ok="poolStates[i]"
@@ -876,7 +925,7 @@ function create() {
                                     size="xs"
                                     class="margin-end-2"
                                 />
-                                Add node pool
+                                Create Node Pool
                             </ArButton>
                             <span
                                 v-if="draft.pools.length >= 3"
@@ -885,59 +934,8 @@ function create() {
                             <span
                                 v-else-if="draft.pools.length > 1"
                                 class="text-caption-1 muted"
-                            >New pools start with the same credentials as node-pool-1.</span>
+                            >New pools use the same operating system and root volume as the first pool.</span>
                         </div>
-                    </div>
-                </ArSection>
-
-                <!-- ================= BASIC INFO ================= -->
-                <ArSection title="Basic Info">
-                    <div class="flex flex-column gap-4" style="max-width: 520px">
-                        <ArField
-                            label="Name"
-                            required
-                            :message="nameMessage"
-                            :error="Boolean(draft.name) && !nameOk"
-                        >
-                            <ArInput
-                                v-model="draft.name"
-                                placeholder="Enter a name"
-                                spellcheck="false"
-                                autocomplete="off"
-                                ltr
-                                style="text-transform: lowercase"
-                            />
-                        </ArField>
-
-                        <ArField
-                            label="Labels"
-                            :message="labelError"
-                            :error="Boolean(labelError)"
-                        >
-                            <!-- panel's tag input pattern: input with a separate
-                                 "+" button, hint below, then the added tags -->
-                            <div class="label-input-row">
-                                <ArInput
-                                    v-model="labelInput"
-                                    placeholder="Confirm labels with enter"
-                                    spellcheck="false"
-                                    @input="labelError = ''"
-                                    @keydown="onLabelKeydown"
-                                />
-                                <ArButton variant="secondary" icon="plus" aria-label="Add label" @click="addLabel()" />
-                            </div>
-                            <span class="field-hint text-caption-1 muted">After typing each label, press the Enter key.</span>
-                            <div v-if="draft.labels.length" class="label-tags">
-                                <ArTag
-                                    v-for="l in draft.labels"
-                                    :key="l"
-                                    class="mono"
-                                    @click="removeLabel(l)"
-                                >
-                                    {{ l }}
-                                </ArTag>
-                            </div>
-                        </ArField>
                     </div>
                 </ArSection>
 
@@ -946,60 +944,39 @@ function create() {
 
             <!-- ================= SUMMARY RAIL ================= -->
             <aside class="wizard-rail">
-                <div class="ar-card rail-card">
+                <ArSection content-class="create-summary">
                     <div class="rail-group">
-                        <h4>Region and Availability Zone</h4>
-                        <div class="rail-text">
-                            <p>Region: {{ region?.name }}</p>
-                            <p>Availability Zone: {{ railZones.length ? railZones.map(zoneName).join(', ') : '—' }}</p>
-                        </div>
+                        <h4>Basic Info</h4>
+                        <div class="rail-text"><p>Cluster Name: {{ draft.name || '—' }}</p><p>Labels: {{ draft.labels.join(', ') || '—' }}</p></div>
                     </div>
-
                     <div class="rail-group">
-                        <h4>Cluster Type and Version</h4>
+                        <h4>Region</h4><div class="rail-text"><p>Region: {{ region?.name }}</p></div>
+                    </div>
+                    <div class="rail-group">
+                        <h4>Cluster Configuration</h4>
                         <div class="rail-text">
                             <p>Cluster Type: {{ cpPlan?.name }}</p>
-                            <p>Control Plane Distribution: {{ masterDist === 'automatic' ? 'Multi AZ' : `Single AZ · ${REGION.zones.find((z) => z.id === masterHostAz)?.name}` }}</p>
-                            <p>Kubernetes Version: {{ VERSIONS.find((v) => v.id === draft.version)?.patch }}</p>
+                            <p>Master Distribution: {{ masterDist === 'automatic' ? 'Multi AZ' : `Single AZ (${zoneName(masterHostAz)})` }}</p>
+                            <p>Kubernetes Version: {{ VERSIONS.find(v => v.id === draft.version)?.patch }}</p>
                         </div>
                     </div>
-
                     <div class="rail-group">
                         <h4>Network</h4>
                         <div class="rail-text">
-                            <p>VPC: {{ vpc ? `${vpc.name} (${vpc.cidr})` : '—' }}</p>
-                            <p>Subnet: {{ railSubnets || '—' }}</p>
-                            <p>Pod CIDR: <span class="mono">{{ cidrStr(draft.podCidrs[0]) }}</span></p>
-                            <p>Service CIDR: <span class="mono">{{ cidrStr(draft.svcCidrs[0]) }}</span></p>
+                            <p>VPC: {{ vpc?.name || '—' }}</p><p>Subnet: {{ railSubnets || '—' }}</p>
+                            <p>Pod Subnet: {{ cidrStr(draft.podCidrs[0]) }}</p><p>Service Subnet: {{ cidrStr(draft.svcCidrs[0]) }}</p>
                         </div>
                     </div>
-
                     <div class="rail-group">
-                        <h4>Node Pools ({{ draft.pools.length }}/3)</h4>
-                        <div class="rail-text">
-                            <template v-if="draft.pools.length">
-                                <p
-                                    v-for="(p, i) in draft.pools"
-                                    :key="p.id"
-                                >
-                                    {{ poolNameOf(p, i) }} · {{ p.specs[0]?.flavorId || 'no flavor' }} × {{ p.count || '—' }}
-                                    <span
-                                        v-if="!poolStates[i]"
-                                        class="rail-err"
-                                    >· incomplete</span>
-                                </p>
-                            </template>
-                            <p v-else>No node pools configured.</p>
+                        <h4>Node Pool</h4>
+                        <div v-for="(p, i) in draft.pools" :key="p.id" class="rail-text rail-pool">
+                            <strong>Node Pool {{ i + 1 }}</strong>
+                            <p>Node Pool Name: {{ poolNameOf(p, i) }}</p>
+                            <p>Flavor: {{ p.specs[0]?.flavorId || '—' }}<template v-if="p.specs[0]"> / {{ FLAVOR_CATALOG.find(f => f.id === p.specs[0].flavorId)?.vcpu }} vCPU {{ FLAVOR_CATALOG.find(f => f.id === p.specs[0].flavorId)?.ram }} GB RAM</template></p>
+                            <p v-if="masterDist === 'automatic'">AZ: {{ p.specs[0]?.zones.map(zoneName).join(', ') || '—' }}</p>
+                            <p>Root Volume: {{ p.rootDisk }} GB</p><p>Node Count: {{ p.count || '—' }}</p>
                         </div>
                     </div>
-
-                    <div class="rail-group">
-                        <h4>Cluster Name</h4>
-                        <div class="rail-text">
-                            <p>Name: {{ draft.name || '—' }}</p>
-                        </div>
-                    </div>
-
                     <div class="price-line">
                         <span class="ph">{{ fmtIRR(price.hourly) }} <span>IRR/hour</span></span>
                         <span class="pd">{{ fmtIRR(price.hourly * 24) }} IRR/Day</span>
@@ -1019,18 +996,42 @@ function create() {
                     >
                         Complete the cluster settings and every node pool card to enable creation.
                     </p>
-                </div>
+                </ArSection>
             </aside>
         </div>
     </main>
 </template>
 
 <style scoped>
-.page-wide { max-width: 1280px; }
+.page-wide { max-width: none; padding: 0 24px 24px; }
+.page-header { margin: 0 -24px 24px; padding: 16px 24px; background: var(--bg-neutral-t1-1-default); border-bottom: 1px solid var(--st-neutral-t1-5-default); }
+.wizard-grid { grid-template-columns: minmax(0, 739fr) minmax(280px, 365fr); gap: 16px; }
+.wizard-main { min-width: 0; }
+.wizard-rail { min-width: 0; }
+:deep(.cidr-octet) { width: 56px; flex: none; }
+:deep(.cidr-prefix) { width: 88px; flex: none; }
+@media(max-width: 1200px) { .wizard-grid { grid-template-columns: minmax(0, 1fr); } .wizard-rail { position: static; } }
+.region-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media(max-width: 540px) { .region-grid { grid-template-columns: minmax(0, 1fr); } }
+.compact-tabs { width: max-content; margin-bottom: 16px; }
+.plan-table { margin-bottom: 16px; }
+.daily-price { white-space: nowrap; text-decoration: underline dotted; }
+.az-radio-row { display: flex; gap: 24px; }
+.subnet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 16px; }
+.vpc-control { display: flex; align-items: center; gap: 8px; }
+.vpc-control > :first-child { flex: 1; min-width: 0; }
+.rail-group { margin-bottom: 16px; }
+.rail-group h4 { margin: 0 0 8px; font-size: 14px; font-weight: 550; }
+.rail-text { color: var(--fg-neutral-t1-3-default); font-size: 12px; line-height: 20px; }
+.rail-text p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.rail-pool + .rail-pool { margin-top: 12px; }
+:deep(.create-summary) { padding: 24px; }
+@media(min-width: 541px) and (max-width: 1100px) { .region-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media(max-width: 900px) { .wizard-grid { grid-template-columns: minmax(0, 1fr); } }
 .create-sections {
     display: flex;
     flex-direction: column;
-    gap: var(--space-5);
+    gap: 16px;
 }
 .m-0 { margin: 0; }
 .margin-top-2 { margin-top: var(--space-2); }
@@ -1060,13 +1061,13 @@ function create() {
 
 /* ArCard renders display:block — re-assert the card layouts from components.css
    (region-card / type-row expect flex, with the radio as a flex child) */
-.region-card.ArCard {
+.region-card {
     display: flex;
     align-items: flex-start;
     gap: var(--space-3);
     padding: var(--space-4);
 }
-.type-row.ArCard {
+.type-row {
     display: flex;
     align-items: center;
     padding: var(--space-4) var(--space-5);
@@ -1083,7 +1084,7 @@ function create() {
     border-top: 1px solid var(--st-neutral-t1-5-default);
 }
 .net-title { gap: 4px; margin-bottom: var(--space-4); }
-.cidr-cap { color: var(--fg-error-t1-1-default); font-weight: 450; }
+.cidr-cap { color: var(--fg-primary-t3-1-default); font-weight: 450; }
 
 /* subnet table rows (ArTable) */
 .subnet-row { cursor: pointer; }

@@ -20,4 +20,7 @@ const bare = computed(() => !!route.meta.bareChrome)
     </div>
   </div>
   <Toaster />
+  <portal-target name="dropdown-options" multiple />
+  <portal-target name="modals" multiple />
+  <portal-target name="side-panels" multiple />
 </template>
