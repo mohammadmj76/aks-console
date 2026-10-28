@@ -27,7 +27,7 @@ const charts = computed(() => {
     { key: 'mem', title: 'Memory Usage', data: usageSeries('mem', Math.max(8, usage.mem * (0.55 + h * 0.25)), 1), formatter: formatPercent },
     { key: 'up', title: 'Uplink Rate', data: [series('Uplink Rate', genPoints(`${props.cluster.id}|ov|Last 6 hours|up`, { base: up, variance: up * 0.35, min: 2 }))], formatter: formatRate },
     { key: 'down', title: 'Downlink Rate', data: [series('Downlink Rate', genPoints(`${props.cluster.id}|ov|Last 6 hours|down`, { base: down, variance: down * 0.3, min: 4 }))], formatter: formatRate },
-  ]
+  ].map(chart => ({ ...chart, current: chart.formatter(chart.data[0].data.at(-1).y) }))
 })
 const columns = [
   { name: 'index', label: '' }, { name: 'name', label: 'Name' }, { name: 'status', label: 'Status' },
@@ -65,8 +65,8 @@ watch(() => props.cluster.id, () => { times.value = genTimes(6, 40); monitorOpen
     <template #header><div><h2>Monitoring</h2><p>CPU, memory and network usage across worker nodes.</p></div></template>
     <div class="overview-monitoring__grid">
       <div v-for="chart in charts" :key="chart.key" class="overview-monitoring__tile">
-        <h3>{{ chart.title }}</h3>
-        <ArLineAreaChart :data="chart.data" type="line" smooth x-axis-type="time" :height="220" :format-x-axis="formatTime" :format-y-axis="chart.formatter" />
+        <div class="overview-monitoring__tile-header"><h3>{{ chart.title }}</h3><strong :aria-label="`Latest ${chart.title}: ${chart.current}`">{{ chart.current }}</strong></div>
+        <ArLineAreaChart :data="chart.data" type="line" smooth x-axis-type="time" :height="320" :format-x-axis="formatTime" :format-y-axis="chart.formatter" />
       </div>
     </div>
     <p class="overview-monitoring__note">Prototype metrics · Last 6 hours</p>
@@ -107,6 +107,9 @@ p { margin: 8px 0 0; color: var(--fg-neutral-t1-3-default); font-size: 14px; lin
 :deep(.overview-monitoring__content), :deep(.overview-control-plane__content) { padding: 48px; }
 .overview-monitoring__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .overview-monitoring__tile { min-width: 0; border: 1px solid var(--st-neutral-t1-5-default); border-radius: 8px; padding: 24px; background: var(--bg-neutral-t1-1-default); }
+.overview-monitoring__tile-header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.overview-monitoring__tile-header h3 { margin: 0; }
+.overview-monitoring__tile-header strong { font-size: 16px; line-height: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .overview-monitoring__note { margin-top: 16px; font-size: 12px; }
 .overview-control-plane__scroll { overflow-x: auto; }
 .overview-control-plane__table :deep(table) { min-width: 920px; table-layout: fixed; }

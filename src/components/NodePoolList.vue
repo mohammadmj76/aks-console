@@ -58,11 +58,19 @@ const filteredPools = computed(() => {
   if (!text) return props.cluster.pools || []
   return (props.cluster.pools || []).filter((p) => `${p.name} ${flavorText(p)}`.toLowerCase().includes(text))
 })
+const allVisibleSelected = computed(() => filteredPools.value.length > 0 && filteredPools.value.every((p) => selectedIds.value.includes(p.id)))
+const someVisibleSelected = computed(() => !allVisibleSelected.value && filteredPools.value.some((p) => selectedIds.value.includes(p.id)))
 const selectedPools = computed(() => (props.cluster.pools || []).filter((p) => selectedIds.value.includes(p.id)))
 const canDeleteSelected = computed(() => selectedPools.value.length > 0 && props.cluster.pools.length - selectedPools.value.length >= 1)
 const groupItems = computed(() => [
   { items: [{ id: 'delete', title: 'Delete selected node pools', variant: 'delete', disabled: !canDeleteSelected.value }] },
 ])
+watch(() => props.cluster.id, () => {
+  query.value = ''
+  selectedIds.value = []
+  expandedIds.value = new Set(props.cluster.pools?.slice(0, 1).map((p) => p.id) || [])
+  groupActionOpen.value = false
+})
 watch(() => props.cluster.pools, (pools) => {
   const valid = new Set((pools || []).map((p) => p.id))
   selectedIds.value = selectedIds.value.filter((id) => valid.has(id))
@@ -80,7 +88,9 @@ function toggleSelected(id) {
 }
 function toggleAll() {
   const ids = filteredPools.value.map((p) => p.id)
-  selectedIds.value = selectedIds.value.length === ids.length ? [] : ids
+  selectedIds.value = allVisibleSelected.value
+    ? selectedIds.value.filter((id) => !ids.includes(id))
+    : [...new Set([...selectedIds.value, ...ids])]
 }
 function openPool(pool) {
   router.push({ name: 'pool-details', params: { id: props.cluster.id, poolId: pool.id } })
@@ -96,6 +106,7 @@ function onGroupAction(item) {
   if (item.id === 'delete' && canDeleteSelected.value) groupActionOpen.value = true
 }
 function deleteSelected() {
+  if (!canDeleteSelected.value) return
   for (const pool of selectedPools.value) store.removePool(props.cluster, pool)
   selectedIds.value = []
   groupActionOpen.value = false
@@ -122,7 +133,7 @@ function deleteSelected() {
       <div class="node-pool-list__table-wrap">
         <ArTable :columns="columns" :items="filteredPools" class="node-pool-list__table">
           <template #header-select>
-            <ArTableCell header><ArCheckbox :model-value="filteredPools.length > 0 && selectedIds.length === filteredPools.length" aria-label="Select all node pools" @update:model-value="toggleAll" /></ArTableCell>
+            <ArTableCell header><ArCheckbox :model-value="allVisibleSelected" :indeterminate="someVisibleSelected" aria-label="Select all node pools" @update:model-value="toggleAll" /></ArTableCell>
           </template>
           <template #body>
             <template v-for="(pool, index) in filteredPools" :key="pool.id">
@@ -164,7 +175,7 @@ function deleteSelected() {
     <p>Deleting these pools removes their nodes and root volumes.</p>
     <template #footer>
       <ArButton variant="tertiary" @click="groupActionOpen = false">Cancel</ArButton>
-      <ArButton variant="primary-danger" @click="deleteSelected">Delete node pools</ArButton>
+      <ArButton variant="primary-danger" :disabled="!canDeleteSelected" @click="deleteSelected">Delete node pools</ArButton>
     </template>
   </ArModal>
 </template>

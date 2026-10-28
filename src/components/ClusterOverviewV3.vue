@@ -141,7 +141,7 @@ watch(() => props.cluster.id, () => {
     <template #footer><ArButton variant="tertiary" @click="labelsOpen = false">Cancel</ArButton><ArButton variant="primary" @click="saveLabels">Save labels</ArButton></template>
   </ArModal>
   <ArModal v-model="deleteOpen" title="Delete cluster" caption="This action cannot be undone.">
-    <ArAlert variant="warning">Deleting removes the control plane, all node pools and their volumes.</ArAlert>
+    <ArAlert type="warning" icon="warning" description="Deleting removes the control plane, all node pools and their volumes." />
     <ArField :label="`Type ${cluster.name} to confirm`" class="overview-v3__delete-field"><ArInput v-model="confirmName" aria-label="Confirm cluster name" /></ArField>
     <template #footer><ArButton variant="tertiary" @click="deleteOpen = false">Cancel</ArButton><ArButton variant="primary-danger" :disabled="confirmName !== cluster.name" @click="deleteCluster">Delete cluster</ArButton></template>
   </ArModal>
