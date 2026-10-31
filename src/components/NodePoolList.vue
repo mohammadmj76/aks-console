@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArBadge, ArButton, ArButtonMenu, ArCheckbox, ArInput, ArLinkButton, ArModal, ArSection, ArTable, ArTableCell, ArTableRow, ArTooltip } from '../uikit'
-import { FLAVOR_CATALOG, REGION, flavorName } from '../data'
+import { FLAVOR_CATALOG, REGION, VPCS, flavorName } from '../data'
 import { store } from '../store'
 import PoolActions from './PoolActions.vue'
 
@@ -24,6 +24,8 @@ const columns = [
   { name: 'index', label: '' },
   { name: 'expand', label: '' },
   { name: 'name', label: 'Name' },
+  { name: 'status', label: 'Status' },
+  { name: 'subnet', label: 'Subnet' },
   { name: 'nodes', label: 'Node' },
   { name: 'actions', label: '' },
 ]
@@ -39,6 +41,24 @@ const poolFlavorIds = (pool) => pool.specs?.length ? pool.specs.map((s) => s.fla
 const flavorFor = (pool) => FLAVOR_CATALOG.find((f) => f.id === poolFlavorIds(pool)[0])
 const flavorText = (pool) => poolFlavorIds(pool).map((id) => flavorName(id)).join(', ') || '—'
 const zoneText = (id) => REGION.zones.find((z) => z.id === id)?.name || id
+
+/* pool status follows the cluster lifecycle; its subnets come from the cluster VPC */
+const poolStatus = computed(() => {
+  switch (props.cluster.status) {
+    case 'running': return { text: 'Ready', variant: 'success', icon: 'check-circle' }
+    case 'upgrading': return { text: 'Upgrading', variant: 'info', icon: '' }
+    case 'provisioning': return { text: 'Creating', variant: 'info', icon: '' }
+    default: return { text: 'Unavailable', variant: 'danger', icon: '' }
+  }
+})
+const subnetsById = computed(() => {
+  const byId = {}
+  for (const vpc of VPCS) for (const s of vpc.subnets) byId[s.id] = s
+  return byId
+})
+const poolSubnets = (pool) => (pool.subnets?.length ? pool.subnets : props.cluster.subnetIds)
+  .map((id) => subnetsById.value[id]).filter(Boolean)
+const subnetText = (pool) => poolSubnets(pool).map((s) => s.name).join(', ') || '—'
 function nodesOf(pool) {
   const flavors = poolFlavorIds(pool)
   const flavor = flavorFor(pool)
@@ -151,6 +171,8 @@ function deleteSelected() {
               <ArTableCell><span class="node-pool-list__index">{{ index + 1 }}</span></ArTableCell>
               <ArTableCell><ArButton variant="ghost" :icon="isExpanded(pool.id) ? 'chevron-up' : 'chevron-down'" :aria-label="`${isExpanded(pool.id) ? 'Collapse' : 'Expand'} ${pool.name}`" :aria-expanded="isExpanded(pool.id)" :aria-controls="`pool-workers-${pool.id}`" @click="toggleExpanded(pool.id)" /></ArTableCell>
               <ArTableCell><ArLinkButton class="node-pool-list__name" @click="openPool(pool)">{{ pool.name }}</ArLinkButton></ArTableCell>
+              <ArTableCell><ArBadge :variant="poolStatus.variant" :text="poolStatus.text" :prepend-icon="poolStatus.icon" /></ArTableCell>
+              <ArTableCell class="node-pool-list__subnet">{{ subnetText(pool) }}</ArTableCell>
               <ArTableCell>{{ pool.count }}</ArTableCell>
               <ArTableCell><PoolActions :cluster="cluster" :pool="pool" /></ArTableCell>
             </ArTableRow>
@@ -207,12 +229,14 @@ function deleteSelected() {
 .node-pool-list__table-wrap { overflow-x: auto; }
 :deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper),
 :deep(.node-pool-list__nodes-table > .v11-1-0-ArTable__tableWrapper) { padding-bottom: 0; overflow: visible; }
-:deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table) { min-width: 680px; width: 100%; table-layout: fixed; }
+:deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table) { min-width: 860px; width: 100%; table-layout: fixed; }
 :deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table > thead > tr > th:nth-child(1)) { width: 44px; }
 :deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table > thead > tr > th:nth-child(2)) { width: 40px; }
 :deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table > thead > tr > th:nth-child(3)) { width: 48px; }
-:deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table > thead > tr > th:nth-child(5)) { width: 140px; }
-:deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table > thead > tr > th:nth-child(6)) { width: 56px; }
+:deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table > thead > tr > th:nth-child(5)) { width: 130px; }
+:deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table > thead > tr > th:nth-child(7)) { width: 90px; }
+:deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table > thead > tr > th:nth-child(8)) { width: 56px; }
+.node-pool-list__subnet { overflow-wrap: anywhere; }
 :deep(.node-pool-list__table .v11-1-0-ArTableCell) { padding: 8px 12px; font-size: 14px; line-height: 20px; color: var(--fg-neutral-t1-2-default); border-bottom: 1px solid var(--st-neutral-t1-5-default); }
 :deep(.node-pool-list__table .v11-1-0-ArTableCell--header) { position: relative; height: 48px; font-weight: 400; color: var(--fg-neutral-t1-3-default); }
 :deep(.node-pool-list__table > .v11-1-0-ArTable__tableWrapper > table > thead > tr > th:nth-child(4))::after,
