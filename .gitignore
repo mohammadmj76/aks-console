@@ -6,3 +6,5 @@ dist
 
 # Claude Code local config
 .claude/
+.vercel
+.env*

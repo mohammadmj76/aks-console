@@ -31,6 +31,7 @@ const props = defineProps({
   index: { type: Number, required: true },
   open: { type: Boolean, default: false },
   ok: { type: Boolean, default: true },
+  duplicateName: { type: Boolean, default: false },
   /* zones the pool may use — non-empty when master distribution is Single AZ */
   allowedZones: { type: Array, default: () => [] },
   designRefresh: { type: Boolean, default: false },
@@ -59,7 +60,8 @@ const missingItems = computed(() => {
   const p = props.pool
   const items = []
   if (p.name && !POOL_NAME.test(p.name)) items.push('Pool name: use lowercase letters, digits and dashes (3–40 characters)')
-  if (!p.specs.length) items.push('Flavor: pick one from the flavor table')
+  if (props.duplicateName) items.push('Pool name: choose a unique name')
+  if (p.specs.length !== 1) items.push('Flavor: pick one flavor from the table')
   else if (!p.specs[0].zones.length) items.push('Availability zone: select at least one zone for the chosen flavor')
   if (!(Number.isInteger(p.count) && p.count >= 1 && p.count <= 20)) items.push('Node count: between 1 and 20')
   if (props.designRefresh && !(Number.isInteger(p.rootDisk) && p.rootDisk >= 25 && p.rootDisk <= 1000)) items.push('Root volume: between 25 and 1000 GB')
@@ -71,23 +73,26 @@ const missingItems = computed(() => {
     items.push('Taints: fix the invalid entries')
   return items
 })
-const missingShort = computed(() =>
-  missingItems.value.map((m) => m.split(':')[0]).join(' · ')
-)
-
-/* collapsed-header summary: flavor · node count · zones */
-const summary = computed(() => {
-  const bits = []
+const review = computed(() => {
   const spec = props.pool.specs[0]
-  if (spec) {
-    bits.push(spec.flavorId)
-    const zs = [...new Set(spec.zones)].map((z) => REGION.zones.find((zz) => zz.id === z)?.name || z)
-    if (zs.length) bits.push(zs.join(', '))
-  } else {
-    bits.push('No flavor selected')
-  }
-  bits.push(`${props.pool.count} node${props.pool.count === 1 ? '' : 's'}`)
-  return bits.join(' · ')
+  const flavor = spec ? FLAVOR_CATALOG.find((f) => f.id === spec.flavorId) : null
+  const zones = spec?.zones?.map((z) => {
+    const name = REGION.zones.find((zz) => zz.id === z)?.name || z
+    /* per-AZ counts when the refreshed table set them */
+    return spec.zoneCounts ? `${name} ×${spec.zoneCounts[z] || 1}` : name
+  }) || []
+  const bits = [
+    `${displayName.value}`,
+    flavor?.id || 'No flavor selected',
+    flavor ? `${flavor.vcpu} vCPU · ${flavor.ram} GiB RAM` : '',
+    `${props.pool.count} node${props.pool.count === 1 ? '' : 's'}`,
+    zones.length ? zones.join(', ') : 'No AZ selected',
+    `${props.pool.rootDisk} GB root volume`,
+    IMAGES.find((image) => image.id === props.pool.image)?.name || props.pool.image,
+    props.pool.labels.length ? `${props.pool.labels.length} label${props.pool.labels.length === 1 ? '' : 's'}` : '',
+    props.pool.taints.length ? `${props.pool.taints.length} taint${props.pool.taints.length === 1 ? '' : 's'}` : '',
+  ]
+  return bits.filter(Boolean).join(' · ')
 })
 
 /* ---------------- pool name / node count ---------------- */
@@ -168,7 +173,14 @@ function toggleFlavor(f) {
   if (spec && spec.flavorId === f.id) {
     if (!props.designRefresh) props.pool.specs = []
   }
-  else props.pool.specs = [{ flavorId: f.id, zones: availableZones(f) }]
+  else {
+    props.pool.specs = [{ flavorId: f.id, zones: availableZones(f) }]
+    if (props.designRefresh) {
+      /* per-AZ node counts default to 1; the pool total follows the table */
+      props.pool.specs[0].zoneCounts = Object.fromEntries(availableZones(f).map((z) => [z, 1]))
+      syncTotalCount()
+    }
+  }
 }
 function specSelected(f) {
   return props.pool.specs[0]?.flavorId === f.id
@@ -176,9 +188,59 @@ function specSelected(f) {
 function specToggleZone(zoneId, f) {
   if (!poolZones.value.includes(zoneId)) return
   if (f.azs.find((z) => z.id === zoneId)?.soldOut) return
-  const zones = props.pool.specs[0].zones
+  const spec = props.pool.specs[0]
+  const zones = spec.zones
   const i = zones.indexOf(zoneId)
-  i >= 0 ? zones.splice(i, 1) : zones.push(zoneId)
+  if (i >= 0) {
+    zones.splice(i, 1)
+    if (props.designRefresh) delete spec.zoneCounts[zoneId]
+  } else {
+    zones.push(zoneId)
+    if (props.designRefresh) spec.zoneCounts[zoneId] = 1
+  }
+  if (props.designRefresh) syncTotalCount()
+}
+
+/* ---------------- per-AZ node counts (design refresh, Multi AZ) ---------------- */
+const AZ_COUNT_COLUMNS = [
+  { label: 'AZ', name: 'az' },
+  { label: 'Count', name: 'count' },
+]
+const creationAzRows = computed(() => REGION.zones.map((z) => {
+  const available = Boolean(selectedFlavor.value?.azs.some((a) => a.id === z.id && !a.soldOut))
+  const spec = props.pool.specs[0]
+  return {
+    id: z.id,
+    name: z.name,
+    checked: Boolean(spec?.zones.includes(z.id)),
+    enabled: available && Boolean(spec),
+    count: spec?.zoneCounts?.[z.id] ?? 1,
+  }
+}))
+const azTotal = computed(() => {
+  const spec = props.pool.specs[0]
+  if (!spec) return 0
+  return spec.zones.reduce((sum, z) => {
+    const v = +spec.zoneCounts?.[z]
+    return sum + (Number.isFinite(v) ? v : 0)
+  }, 0)
+})
+function syncTotalCount() {
+  const spec = props.pool.specs[0]
+  if (!spec) return
+  props.pool.count = azTotal.value
+}
+function setZoneCount(zoneId, value) {
+  const spec = props.pool.specs[0]
+  if (!spec || !spec.zones.includes(zoneId)) return
+  spec.zoneCounts[zoneId] = value
+  syncTotalCount()
+}
+function bumpZoneCount(zoneId, delta) {
+  const spec = props.pool.specs[0]
+  if (!spec || !spec.zones.includes(zoneId)) return
+  const cur = +spec.zoneCounts[zoneId] || 1
+  setZoneCount(zoneId, Math.min(20, Math.max(1, cur + delta)))
 }
 const selectedFlavor = computed(() =>
   props.pool.specs.length ? FLAVOR_CATALOG.find((f) => f.id === props.pool.specs[0].flavorId) : null
@@ -275,7 +337,8 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
     <!-- ======== header (always visible) ======== -->
     <div v-if="!configurationOnly" class="pool-head" role="button" :aria-expanded="open" tabindex="0"
       @click="emit('toggle')"
-      @keydown.enter.prevent="emit('toggle')"
+      @keydown.enter.self.prevent="emit('toggle')"
+      @keydown.space.self.prevent="emit('toggle')"
     >
       <ArIcon
         name="chevron-down"
@@ -285,14 +348,15 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       />
       <div class="pool-titles">
         <span class="pool-name text-body-1-strong">{{ designRefresh ? `Node Pool ${index + 1}` : displayName }}</span>
-        <span
-          v-if="!open && !designRefresh"
-          class="pool-sub text-caption-1"
-          :class="{ 'err-sub': !ok }"
-        >{{ !ok ? `Missing: ${missingShort}` : summary }}</span>
+        <span v-if="!open && !ok" class="pool-sub err-sub text-caption-1">
+          <span v-for="item in missingItems" :key="item">{{ item }}</span>
+          <span v-if="!missingItems.length">Complete the required settings.</span>
+        </span>
+        <span v-else-if="!open" class="pool-sub text-caption-1">{{ review }}</span>
       </div>
       <ArBadge
         v-if="!open && !ok"
+        class="pool-status"
         :variant="designRefresh ? 'warning' : 'danger'"
         prepend-icon="warning"
         size="sm"
@@ -301,6 +365,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       />
       <ArBadge
         v-else-if="!open && ok"
+        class="pool-status"
         variant="success"
         size="sm"
         pill
@@ -331,10 +396,9 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       <div v-if="!configurationOnly" class="flex gap-4 flex-wrap">
         <ArField
           :label="designRefresh ? 'Node Pool Name' : 'Pool Name'"
-          :required="designRefresh"
           class="pool-name-field"
-          :error="Boolean(pool.name) && !nameOk"
-          :message="pool.name && !nameOk ? 'Lowercase letters, digits and dashes. 3–40 characters.' : ''"
+          :error="(Boolean(pool.name) && !nameOk) || duplicateName"
+          :message="pool.name && !nameOk ? 'Lowercase letters, digits and dashes. 3–40 characters.' : duplicateName ? 'A node pool with this name already exists.' : `Leave blank to use node-pool-${index + 1}.`"
         >
           <ArInput
             v-model="pool.name"
@@ -494,13 +558,27 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       <template v-if="designRefresh">
         <div v-if="!allowedZones.length" class="creation-azs">
           <span class="text-body-2">{{ configurationOnly ? 'Node Creation AZs' : 'AZs for Node Creation' }}<span v-if="configurationOnly" class="required-mark">*</span></span>
-          <div class="creation-az-options">
-            <ArCheckbox v-for="z in REGION.zones" :key="z.id" :label="z.name"
-              :model-value="Boolean(pool.specs[0]?.zones.includes(z.id))"
-              :disabled="!selectedFlavor || !selectedFlavor.azs.some(a => a.id === z.id && !a.soldOut)"
-              @update:model-value="specToggleZone(z.id, selectedFlavor)" />
-          </div>
-          <UIKit.ArAlert type="info" icon="info" description="AZs may be disabled when no capacity is available." />
+          <ArTable :columns="AZ_COUNT_COLUMNS" :items="creationAzRows" class="creation-az-table">
+            <template #row="row">
+              <ArTableRow :key="row.id">
+                <ArTableCell>
+                  <div class="creation-az-cell">
+                    <ArCheckbox :model-value="row.checked" :disabled="!row.enabled" :aria-label="`Select ${row.name} for node creation`" @update:model-value="specToggleZone(row.id, selectedFlavor)" />
+                    <span>{{ row.name }}</span>
+                  </div>
+                </ArTableCell>
+                <ArTableCell>
+                  <div class="number-stepper creation-az-count" :class="{ 'is-disabled': !row.checked }">
+                    <ArButton variant="ghost" icon="minus" :disabled="!row.checked || (+row.count || 1) <= 1" :aria-label="`Decrease node count in ${row.name}`" @click="bumpZoneCount(row.id, -1)" />
+                    <ArInput :model-value="row.checked ? row.count : ''" :disabled="!row.checked" inputmode="numeric" :aria-label="`Node count in ${row.name}`" @update:model-value="setZoneCount(row.id, /^\d+$/.test($event) ? +$event : '')" @focusout="bumpZoneCount(row.id, 0)" />
+                    <ArButton variant="ghost" icon="plus" :disabled="!row.checked || pool.count >= 20" :aria-label="`Increase node count in ${row.name}`" @click="bumpZoneCount(row.id, 1)" />
+                  </div>
+                </ArTableCell>
+              </ArTableRow>
+            </template>
+          </ArTable>
+          <div class="creation-az-total text-body-2">Total Node Count: {{ azTotal }}</div>
+          <UIKit.ArAlert type="info" icon="info" description="Select one or more availability zones for worker nodes. You can select all three." />
         </div>
         <ArField label="Root Volume" :error="!Number.isInteger(pool.rootDisk) || pool.rootDisk < ROOT_DISK_MIN || pool.rootDisk > ROOT_DISK_MAX">
           <div class="volume-row">
@@ -512,7 +590,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
             <span class="volume-spec">IOPS: 1000</span><span class="volume-spec">Bandwidth: 15 MB/S</span>
           </div>
         </ArField>
-        <ArField label="Node Count" message="1–20 nodes per pool." :error="!Number.isInteger(pool.count) || pool.count < 1 || pool.count > 20">
+        <ArField v-if="allowedZones.length" label="Node Count" message="1–20 nodes per pool." :error="!Number.isInteger(pool.count) || pool.count < 1 || pool.count > 20">
           <div class="number-stepper">
             <ArButton variant="ghost" icon="minus" :disabled="pool.count <= 1" aria-label="Decrease node count" @click="bumpCount(-1)" />
             <ArInput :model-value="pool.count" inputmode="numeric" aria-label="Node count" @update:model-value="pool.count = /^\d+$/.test($event) ? +$event : ''" @focusout="bumpCount(0)" />
@@ -710,14 +788,28 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 @media (max-width: 540px) { .configuration-only.design-refresh .design-filters { grid-template-columns: minmax(0, 1fr); } .configuration-only .flavor-table { padding: 8px; } }
 .required-mark { color: var(--fg-error-t1-1-default); margin-left: 2px; }
 .design-refresh .pool-name-field { width: 100%; max-width: none; min-width: 0; }
-.design-refresh .pool-sub { display: none; }
-.design-refresh .pool-head { padding: 24px; }
+.design-refresh .pool-head { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto; padding: 24px; }
+.design-refresh .pool-titles { display: contents; }
+.design-refresh .pool-chev { grid-column: 1; grid-row: 1; }
+.design-refresh .pool-name { grid-column: 2; grid-row: 1; }
+.design-refresh .pool-head > .pool-status { grid-column: 3; grid-row: 1; }
+.design-refresh .delete-pool-link { grid-column: 4; grid-row: 1; }
+.design-refresh .pool-sub { grid-column: 2 / -1; grid-row: 2; }
+@media (max-width: 540px) {
+  .design-refresh .pool-head { grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; padding: 16px; }
+  .design-refresh .delete-pool-link { grid-column: 3; }
+  .design-refresh .pool-head > .pool-status { grid-column: 2; grid-row: 2; justify-self: start; }
+  .design-refresh .pool-sub { grid-row: 3; }
+}
 .delete-pool-link { color: var(--fg-error-t1-1-default); }
 .design-refresh .pool-body { padding: 24px; gap: 16px; }
 .design-refresh .design-filters { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 16px; }
 .design-refresh .design-filters > * { min-width: 0; width: auto; }
 .creation-azs { display: flex; flex-direction: column; gap: 12px; }
-.creation-az-options { display: flex; flex-wrap: wrap; gap: 20px; }
+.creation-az-cell { display: flex; align-items: center; gap: 12px; }
+.creation-az-table :deep(.number-stepper) { width: 140px; }
+.creation-az-count.is-disabled { opacity: 0.45; }
+.creation-az-total { text-align: right; color: var(--fg-neutral-t1-2-default); }
 .az-cell-label { display: block; width: max-content; font-size: 12px; }
 .number-stepper { display: flex; align-items: center; width: 200px; border: 1px solid var(--st-neutral-t1-4-default); border-radius: 8px; }
 .number-stepper :deep([class$="-ArInput"]) { min-width: 0; flex: 1; --inputBorder: transparent; }
@@ -744,8 +836,9 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 .pool-name { color: var(--fg-neutral-t1-1-default); }
 .pool-sub {
   color: var(--fg-neutral-t1-3-default);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  white-space: normal; overflow-wrap: anywhere;
 }
+.pool-sub > span { display: block; }
 .pool-sub.err-sub { color: var(--fg-error-t1-1-default); }
 .pool-del {
   flex: none; display: inline-flex; align-items: center; gap: 4px;

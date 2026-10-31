@@ -1,9 +1,9 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store } from '../store'
 import { FLAVOR_CATALOG, VOLUME_PRICE_PER_GB, fmtIRR } from '../data'
-import { ArAlert, ArButton, ArButtonMenu, ArField, ArIcon, ArInput, ArModal, ArTag } from '../uikit'
+import { ArAlert, ArButton, ArButtonMenu, ArField, ArIcon, ArInput, ArModal, ArTag, ArTooltip } from '../uikit'
 
 /*
  * The node-pool "…" menu and its management panels (adjust node count /
@@ -63,7 +63,7 @@ const poolPrice = computed(() => {
   return { hourly: Math.max(1_000, Math.round(monthly / 730 / 1_000) * 1_000), monthly }
 })
 function saveResize() {
-  if (!countOk.value || countForm.count === props.pool.count) return
+  if (props.cluster.status !== 'running' || !countOk.value || countForm.count === props.pool.count) return
   store.resizePool(props.cluster, props.pool, countForm.count)
   panel.value = ''
 }
@@ -86,22 +86,30 @@ function saveRename() {
 const K8S_KEY = /^[a-z0-9]([a-z0-9-.]*[a-z0-9])?$/
 const K8S_VAL = /^[a-zA-Z0-9]([a-zA-Z0-9-_.]*[a-zA-Z0-9])?$/
 const labelsForm = reactive({ list: [], input: '' })
-const labelsOk = computed(() =>
-  labelsForm.list.every((l) => {
-    const [k, v] = l.split('=')
-    return K8S_KEY.test(k) && v !== undefined && K8S_VAL.test(v)
-  })
-)
+const labelError = ref('')
+function validLabel(label) {
+  const parts = label.split('=')
+  return parts.length === 2 && K8S_KEY.test(parts[0]) && K8S_VAL.test(parts[1]) && parts[1].length <= 63
+}
+const labelsOk = computed(() => labelsForm.list.every(validLabel))
+watch(() => labelsForm.input, () => { labelError.value = '' })
 function addLabel() {
-  const v = labelsForm.input.trim().replace(/\s+/g, '')
-  if (v && v.includes('=') && !labelsForm.list.includes(v) && labelsForm.list.length < 20) labelsForm.list.push(v)
+  const value = labelsForm.input.trim()
+  labelError.value = ''
+  if (!value) return
+  if (!validLabel(value)) { labelError.value = 'Use key=value with a lowercase key, no spaces and a value of up to 63 characters.'; return }
+  if (labelsForm.list.some(label => label.split('=')[0] === value.split('=')[0])) { labelError.value = 'A label with this key already exists. Remove it before adding a replacement.'; return }
+  if (labelsForm.list.length >= 20) { labelError.value = 'Add up to 20 labels.'; return }
+  labelsForm.list.push(value)
   labelsForm.input = ''
 }
 function removeLabel(l) {
   labelsForm.list = labelsForm.list.filter((x) => x !== l)
+  labelError.value = ''
 }
 function saveLabels() {
-  if (!labelsOk.value) return
+  addLabel()
+  if (labelError.value || !labelsOk.value) return
   store.setPoolLabels(props.cluster, props.pool, [...labelsForm.list])
   panel.value = ''
 }
@@ -116,20 +124,24 @@ function doDelete() {
 }
 
 function onSelect(item) {
+  if (item.disabled || (item.id === 'resize' && props.cluster.status !== 'running') || (item.id === 'delete' && props.cluster.pools.length <= 1)) return
   if (item.id === 'resize') countForm.count = props.pool.count
   if (item.id === 'rename') renameForm.name = props.pool.name
   if (item.id === 'labels') {
     labelsForm.list = [...(props.pool.labels || [])]
     labelsForm.input = ''
+    labelError.value = ''
   }
   panel.value = item.id
 }
 </script>
 
 <template>
-  <ArButtonMenu class="pool-actions" variant="ghost" aria-label="Node pool actions" :items="items" menu-position="bottom-end" @item-clicked="onSelect">
-    <ArIcon name="ellipsis" />
-  </ArButtonMenu>
+  <ArTooltip :content="`Manage ${pool.name}${cluster.status !== 'running' ? '. Node count can be adjusted when the cluster is running.' : ''}${cluster.pools.length <= 1 ? '. Keep at least one node pool.' : ''}`">
+    <ArButtonMenu class="pool-actions" variant="ghost" :items="items" menu-position="bottom-end" @item-clicked="onSelect">
+      <ArIcon name="ellipsis" /><span class="pool-actions__sr-only">Actions for {{ pool.name }}</span>
+    </ArButtonMenu>
+  </ArTooltip>
 
   <!-- ===== Adjust node count ===== -->
   <ArModal
@@ -160,7 +172,7 @@ function onSelect(item) {
 
     <template #footer>
       <ArButton variant="tertiary" @click="panel = ''">Cancel</ArButton>
-      <ArButton variant="primary" :disabled="!countOk || countForm.count === pool.count" @click="saveResize">Save changes</ArButton>
+      <ArButton variant="primary" :disabled="cluster.status !== 'running' || !countOk || countForm.count === pool.count" @click="saveResize">Save changes</ArButton>
     </template>
   </ArModal>
 
@@ -185,7 +197,7 @@ function onSelect(item) {
     title="Edit labels"
     :caption="`${cluster.name} · ${pool.name}`"
   >
-    <ArField label="Node labels" :error="labelsForm.list.length > 0 && !labelsOk" :message="labelsOk ? 'Applied to every node. Press Enter after each key=value label. Up to 20 labels.' : 'Use key=value with lowercase keys and values up to 63 characters.'">
+    <ArField label="Node labels" :error="!!labelError || !labelsOk" :message="labelError || (!labelsOk ? 'Use key=value with lowercase keys and values up to 63 characters.' : 'Applied to every node. Press Enter to add a key=value label, or save it directly. Up to 20 labels.')">
       <ArInput v-model="labelsForm.input" placeholder="key=value" aria-label="Node label" spellcheck="false" @keydown.enter.prevent="addLabel" />
       <div class="pool-actions__tags">
         <ArTag v-for="label in labelsForm.list" :key="label" :aria-label="`Remove ${label}`" @click="removeLabel(label)">{{ label }}</ArTag>
@@ -227,6 +239,7 @@ function onSelect(item) {
 .pool-actions :deep(.v11-1-0-ArButton) { padding: 0; width: 32px; height: 32px; }
 .pool-actions :deep(.v11-1-0-ArButton__icon) { display: none; }
 .pool-actions :deep(.v11-1-0-ArButton__content) { margin: 0; }
+.pool-actions__sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .pool-actions__field { margin: 16px 0; }
 .pool-actions__count { display: flex; gap: 8px; width: 200px; }
 .pool-actions__count > :nth-child(2) { flex: 1; min-width: 0; }

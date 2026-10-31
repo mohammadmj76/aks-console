@@ -548,3 +548,11 @@ table.ar-table { width: 100%; border-collapse: collapse; }
   transition: opacity .12s;
 }
 .v-tippy--visible { opacity: 1; }
+
+/* Keep UIKit tooltips consistent with the create-cluster help tips. */
+.v11-1-0-ArTooltip__content {
+  padding: 6px 10px;
+  background: var(--fg-neutral-t1-1-default);
+  color: var(--bg-neutral-t1-1-default);
+}
+.v11-1-0-ArTooltip__arrow { background: var(--fg-neutral-t1-1-default); }

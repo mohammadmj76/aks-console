@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { ArBadge, ArButton, ArLineAreaChart, ArLinkButton, ArProgressBar, ArSection, ArSidePanel, ArTable, ArTableCell, ArTableRow } from '../uikit'
+import { ArBadge, ArButton, ArIcon, ArLineAreaChart, ArLinkButton, ArProgressBar, ArSection, ArSidePanel, ArTable, ArTableCell, ArTableRow, ArTooltip } from '../uikit'
 import { CP_PLANS, REGION, VPCS } from '../data'
 import { genPoints, genTimes, seedHash } from '../metrics'
 
@@ -29,6 +29,12 @@ const charts = computed(() => {
     { key: 'down', title: 'Downlink Rate', data: [series('Downlink Rate', genPoints(`${props.cluster.id}|ov|Last 6 hours|down`, { base: down, variance: down * 0.3, min: 4 }))], formatter: formatRate },
   ].map(chart => ({ ...chart, current: chart.formatter(chart.data[0].data.at(-1).y) }))
 })
+const metricHints = {
+  cpu: 'Simulated worker-node CPU usage. Avg, Max and Min are percentage series; the headline shows the latest Avg.',
+  mem: 'Simulated worker-node memory usage. Avg, Max and Min are percentage series; the headline shows the latest Avg.',
+  up: 'Simulated outbound network traffic from worker nodes, measured in KB/s. The headline shows the latest sample.',
+  down: 'Simulated inbound network traffic to worker nodes, measured in KB/s. The headline shows the latest sample.',
+}
 const columns = [
   { name: 'index', label: '' }, { name: 'name', label: 'Name' }, { name: 'status', label: 'Status' },
   { name: 'az', label: 'AZ' }, { name: 'cpu', label: 'CPU Usage' }, { name: 'ram', label: 'RAM Usage' }, { name: 'monitor', label: '' },
@@ -62,19 +68,18 @@ watch(() => props.cluster.id, () => { times.value = genTimes(6, 40); monitorOpen
 
 <template>
   <ArSection class="overview-monitoring" content-class="overview-monitoring__content">
-    <template #header><div><h2>Monitoring</h2><p>CPU, memory and network usage across worker nodes.</p></div></template>
+    <template #header><div><h2>Monitoring</h2><p>CPU, memory and network usage across worker nodes.</p><p class="overview-monitoring__note">Prototype metrics · Last 6 hours · Local time</p></div></template>
     <div class="overview-monitoring__grid">
       <div v-for="chart in charts" :key="chart.key" class="overview-monitoring__tile">
-        <div class="overview-monitoring__tile-header"><h3>{{ chart.title }}</h3><strong :aria-label="`Latest ${chart.title}: ${chart.current}`">{{ chart.current }}</strong></div>
-        <ArLineAreaChart :data="chart.data" type="line" smooth x-axis-type="time" :height="320" :format-x-axis="formatTime" :format-y-axis="chart.formatter" />
+        <div class="overview-monitoring__tile-header"><h3>{{ chart.title }} <ArTooltip :content="metricHints[chart.key]"><ArIcon name="info" size="sm" class="overview-monitoring__help" tabindex="0" :aria-label="`${chart.title}: ${metricHints[chart.key]}`" /></ArTooltip></h3><strong :aria-label="`Latest ${chart.title}: ${chart.current}`">{{ chart.current }}</strong></div>
+        <div class="overview-monitoring__chart" role="group" :aria-label="`${chart.title} chart, last 6 hours, simulated data`"><ArLineAreaChart :data="chart.data" type="line" smooth x-axis-type="time" :height="320" :format-x-axis="formatTime" :format-y-axis="chart.formatter" /></div>
       </div>
     </div>
-    <p class="overview-monitoring__note">Prototype metrics · Last 6 hours</p>
   </ArSection>
 
   <ArSection class="overview-control-plane" content-class="overview-control-plane__content">
     <template #header><div><h2>Control Plane Nodes</h2><p>Dedicated nodes that manage the cluster.</p></div></template>
-    <div class="overview-control-plane__scroll">
+    <div class="overview-control-plane__scroll" tabindex="0" role="region" aria-label="Control plane nodes table">
       <ArTable :columns="columns" :items="nodes" class="overview-control-plane__table">
         <template #row="node"><ArTableRow>
           <ArTableCell><span class="overview-control-plane__index">{{ node.index }}</span></ArTableCell>
@@ -105,13 +110,18 @@ h3 { margin: 0 0 16px; font-size: 14px; line-height: 20px; font-weight: 400; }
 p { margin: 8px 0 0; color: var(--fg-neutral-t1-3-default); font-size: 14px; line-height: 20px; }
 .overview-monitoring :deep(.v11-1-0-ArSection__section--header), .overview-control-plane :deep(.v11-1-0-ArSection__section--header) { border-bottom: 1px solid var(--st-neutral-t1-5-default); }
 :deep(.overview-monitoring__content), :deep(.overview-control-plane__content) { padding: 48px; }
-.overview-monitoring__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.overview-monitoring__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 16px; }
+.overview-monitoring__chart { min-width: 0; width: 100%; }
 .overview-monitoring__tile { min-width: 0; border: 1px solid var(--st-neutral-t1-5-default); border-radius: 8px; padding: 24px; background: var(--bg-neutral-t1-1-default); }
 .overview-monitoring__tile-header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-.overview-monitoring__tile-header h3 { margin: 0; }
+.overview-monitoring__tile-header h3 { display: flex; align-items: center; gap: 4px; margin: 0; }
 .overview-monitoring__tile-header strong { font-size: 16px; line-height: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.overview-monitoring__note { margin-top: 16px; font-size: 12px; }
+.overview-monitoring__note { margin-top: 8px; font-size: 12px; }
+.overview-monitoring__help { color: var(--fg-neutral-t1-3-default); cursor: help; }
+.overview-monitoring__help:hover { color: var(--fg-neutral-t1-2-default); }
+.overview-monitoring__help:focus-visible, .overview-control-plane__scroll:focus-visible { outline: 2px solid var(--st-primary-t1-1-default); outline-offset: 4px; }
 .overview-control-plane__scroll { overflow-x: auto; }
+.overview-control-plane__table :deep(.v11-1-0-ArTable__tableWrapper) { overflow: visible; padding-bottom: 0; }
 .overview-control-plane__table :deep(table) { min-width: 920px; table-layout: fixed; }
 .overview-control-plane__table :deep(th), .overview-control-plane__table :deep(td) { height: 48px; padding: 8px; font-size: 14px; line-height: 20px; border-bottom: 1px solid var(--st-neutral-t1-5-default); }
 .overview-control-plane__table :deep(th) { color: var(--fg-neutral-t1-3-default); font-weight: 400; position: relative; }
@@ -130,6 +140,6 @@ p { margin: 8px 0 0; color: var(--fg-neutral-t1-3-default); font-size: 14px; lin
 .overview-control-plane__node-meta { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .overview-control-plane__node-chart { margin-bottom: 24px; }
 @media (max-width: 1100px) { .overview-monitoring__tile { padding: 16px; } }
-@media (max-width: 767px) { .overview-monitoring__grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767px) { .overview-monitoring__grid { grid-template-columns: minmax(0, 1fr); } .overview-monitoring__chart :deep(.v11-1-0-ArLineAreaChart) { min-width: 0; } }
 @media (max-width: 640px) { :deep(.overview-monitoring__content), :deep(.overview-control-plane__content) { padding: 24px 12px; } }
 </style>

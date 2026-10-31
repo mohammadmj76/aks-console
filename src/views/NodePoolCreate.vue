@@ -78,10 +78,16 @@ const submitting = ref(false)
 function create() {
   if (!canCreate.value || submitting.value) return
   submitting.value = true
+  const spec = pool.specs[0]
   store.addPool(cluster.value, {
     name: pool.name,
     count: pool.count,
-    specs: [{ flavorId: selectedFlavor.value.id, zones: [...nodeZones.value] }],
+    specs: [{
+      flavorId: selectedFlavor.value.id,
+      zones: [...nodeZones.value],
+      /* per-AZ node counts chosen in the Multi AZ table (undefined in Single AZ) */
+      ...(spec.zoneCounts ? { zoneCounts: { ...spec.zoneCounts } } : {}),
+    }],
     zones: [...nodeZones.value],
     subnets: selectedSubnets.value.filter(s => nodeZones.value.includes(s.zone)).map(s => s.id),
     volumeGb: pool.rootDisk,
@@ -213,7 +219,7 @@ function createSubnet() {
 .node-pool-create__subnet-message { font-size: 12px; line-height: 20px; margin: 16px 0 0; color: var(--fg-neutral-t1-3-default); }
 .node-pool-create__summary { min-width: 0; }
 :deep(.node-pool-create__summary-content) { display: flex; flex-direction: column; padding: 24px; }
-.node-pool-create__summary-details { min-height: 0; }
+.node-pool-create__summary-details { min-height: 0; flex: 1 1 auto; }
 .node-pool-create__summary-group + .node-pool-create__summary-group { margin-top: 16px; }
 .node-pool-create__summary-group h2 { margin: 0 0 12px; font-size: 14px; line-height: 20px; font-weight: 450; }
 .node-pool-create__summary-group p { margin: 0 0 8px; font-size: 12px; line-height: 16px; color: var(--fg-neutral-t1-3-default); overflow-wrap: anywhere; }
@@ -222,12 +228,12 @@ function createSubnet() {
 .node-pool-create__checkout > :last-child { width: 100%; }
 .node-pool-create__price { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 16px; font-size: 12px; line-height: 16px; color: var(--fg-neutral-t1-3-default); }
 .node-pool-create__price strong { color: var(--fg-neutral-t2-2-default); text-decoration: underline; text-underline-offset: 3px; font-size: 16px; line-height: 24px; font-weight: 450; }
-@media (min-width: 768px) {
+@media (min-width: 901px) {
   .node-pool-create__summary { position: sticky; top: calc(var(--header-height) + 56px + 24px); }
   :deep(.node-pool-create__summary-content) { max-height: calc(100dvh - var(--header-height) - 56px - 48px); }
-  .node-pool-create__summary-details { overflow-y: auto; }
+  .node-pool-create__summary-details { overflow-y: auto; scrollbar-gutter: stable; }
 }
-@media (max-width: 767px) {
+@media (max-width: 900px) {
   .node-pool-create__layout { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 540px) {

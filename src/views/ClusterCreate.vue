@@ -81,17 +81,11 @@ function removePool(id) {
 /* ---------------- master distribution ---------------- */
 const masterDist = ref('automatic')
 const masterHostAz = ref('bamdad')
-const planView = ref('Table')
 const versionOptions = VERSIONS.map(v => ({ value: v.id, label: `${v.patch} (End Of Cycle: ${v.endOfCycle})` }))
 const vpcOptions = VPCS.map(v => ({ value: v.id, label: `${v.name} (${v.cidr})` }))
 const selectedVersion = computed(() => versionOptions.find(v => v.value === draft.version))
 const selectedVpc = computed(() => vpcOptions.find(v => v.value === draft.vpcId))
 const visibleSubnets = computed(() => masterDist.value === 'custom' ? singleAzSubnets.value : (vpc.value?.subnets || []))
-const PLAN_COLUMNS = [
-    { name: 'pick', label: '' }, { name: 'type', label: 'Type' },
-    { name: 'replicas', label: 'Replica' }, { name: 'nodes', label: 'Max Node' },
-    { name: 'etcd', label: 'Max Etcd Size' }, { name: 'price', label: 'Price' },
-]
 function refreshNetwork() {
     store.toast('info', 'Network refreshed', 'Showing the current prototype network catalog.')
 }
@@ -177,6 +171,9 @@ function poolOk(p, i, all) {
     if (!p.taints.every((t) => K8S_KEY.test(t.key) && (t.value === '' || K8S_VAL.test(t.value)))) return false
     return true
 }
+const duplicatePoolNames = computed(() => draft.pools.map((p, i) =>
+    draft.pools.some((other, j) => j !== i && poolNameOf(other, j) === poolNameOf(p, i))
+))
 const poolStates = computed(() => draft.pools.map((p, i) => poolOk(p, i, draft.pools)))
 const poolsOk = computed(() => poolStates.value.every(Boolean))
 
@@ -391,7 +388,13 @@ function create() {
             <div class="title-row">
                 <ArButton variant="ghost" icon="chevron-left" aria-label="Back to clusters" @click="router.push('/clusters')" />
                 <h1 class="text-title-2 m-0">Create Kubernetes Cluster</h1>
-
+                <ArLinkButton
+                    :to="{ path: '/clusters/create', query: { flow: 'stepper' } }"
+                    class="flow-link"
+                    append-icon="chevron-right"
+                >
+                    Use the step-by-step flow
+                </ArLinkButton>
             </div>
         </div>
 
@@ -517,20 +520,7 @@ function create() {
                             class="info-icon"
                         />
                     </div>
-                    <ArTab v-model="planView" :items="['Table', 'Card']" class="compact-tabs" />
-                    <ArTable v-if="planView === 'Table'" :columns="PLAN_COLUMNS" :items="CP_PLANS" class="plan-table">
-                        <template #row="p">
-                            <ArTableRow @click="selectType(p)">
-                                <ArTableCell><ArRadio :model-value="draft.cp.plan" :value="p.id" @update:model-value="selectType(p)" /></ArTableCell>
-                                <ArTableCell>{{ p.name }}</ArTableCell>
-                                <ArTableCell>{{ p.replicas }}</ArTableCell>
-                                <ArTableCell>{{ p.maxNodes }}</ArTableCell>
-                                <ArTableCell>{{ p.etcdSize }}</ArTableCell>
-                                <ArTableCell><span class="daily-price">{{ fmtIRR(p.pricePerDay) }} IRR/Day</span></ArTableCell>
-                            </ArTableRow>
-                        </template>
-                    </ArTable>
-                    <div v-else class="type-rows">
+                    <div class="type-rows">
                         <ArCard
                             v-for="p in CP_PLANS"
                             :key="p.id"
@@ -903,6 +893,7 @@ function create() {
                             :index="i"
                             :open="openId === p.id"
                             :ok="poolStates[i]"
+                            :duplicate-name="duplicatePoolNames[i]"
                             :allowed-zones="poolAllowedZones"
                             @toggle="togglePool(p.id)"
                             @remove="removePool(p.id)"
@@ -943,8 +934,9 @@ function create() {
             </div>
 
             <!-- ================= SUMMARY RAIL ================= -->
-            <aside class="wizard-rail">
+            <aside class="wizard-rail" aria-label="Cluster summary">
                 <ArSection content-class="create-summary">
+                    <div class="create-summary__details" role="region" aria-label="Cluster configuration summary" tabindex="0">
                     <div class="rail-group">
                         <h4>Basic Info</h4>
                         <div class="rail-text"><p>Cluster Name: {{ draft.name || '—' }}</p><p>Labels: {{ draft.labels.join(', ') || '—' }}</p></div>
@@ -977,6 +969,8 @@ function create() {
                             <p>Root Volume: {{ p.rootDisk }} GB</p><p>Node Count: {{ p.count || '—' }}</p>
                         </div>
                     </div>
+                    </div>
+                    <div class="create-summary__checkout">
                     <div class="price-line">
                         <span class="ph">{{ fmtIRR(price.hourly) }} <span>IRR/hour</span></span>
                         <span class="pd">{{ fmtIRR(price.hourly * 24) }} IRR/Day</span>
@@ -996,6 +990,7 @@ function create() {
                     >
                         Complete the cluster settings and every node pool card to enable creation.
                     </p>
+                    </div>
                 </ArSection>
             </aside>
         </div>
@@ -1003,19 +998,33 @@ function create() {
 </template>
 
 <style scoped>
-.page-wide { max-width: none; padding: 0 24px 24px; }
+.page-wide { --create-summary-top: var(--header-height); max-width: none; padding: 0 24px 24px; }
 .page-header { margin: 0 -24px 24px; padding: 16px 24px; background: var(--bg-neutral-t1-1-default); border-bottom: 1px solid var(--st-neutral-t1-5-default); }
-.wizard-grid { grid-template-columns: minmax(0, 739fr) minmax(280px, 365fr); gap: 16px; }
+.wizard-grid { grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 16px; }
 .wizard-main { min-width: 0; }
-.wizard-rail { min-width: 0; }
+.wizard-rail { min-width: 0; top: var(--create-summary-top); }
+:deep(.create-summary) { display: flex; flex-direction: column; max-height: calc(100dvh - var(--create-summary-top) - 96px - 24px); padding: 24px; }
+.create-summary__details { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.create-summary__checkout { flex: none; padding-top: 16px; border-top: 1px solid var(--st-neutral-t1-5-default); background: var(--bg-neutral-t1-1-default); }
+.create-summary__checkout .price-line { margin-top: 0; padding-top: 0; border-top: 0; flex-wrap: wrap; }
+.create-summary__checkout > p { margin-bottom: 0; }
 :deep(.cidr-octet) { width: 56px; flex: none; }
 :deep(.cidr-prefix) { width: 88px; flex: none; }
-@media(max-width: 1200px) { .wizard-grid { grid-template-columns: minmax(0, 1fr); } .wizard-rail { position: static; } }
+@media(min-width: 901px) and (max-width: 1100px) {
+    .wizard-grid { grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); }
+    .wizard-rail { position: sticky; top: var(--create-summary-top); }
+}
+@media(max-width: 900px) {
+    .page-wide { padding-bottom: 220px; }
+    .wizard-grid { grid-template-columns: minmax(0, 1fr); }
+    .wizard-rail { position: static; }
+    :deep(.create-summary) { max-height: none; }
+    .create-summary__details { overflow: visible; }
+    .create-summary__checkout { position: fixed; inset: auto 0 0; z-index: 20; padding: 16px 24px calc(16px + env(safe-area-inset-bottom)); }
+}
 .region-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 @media(max-width: 540px) { .region-grid { grid-template-columns: minmax(0, 1fr); } }
 .compact-tabs { width: max-content; margin-bottom: 16px; }
-.plan-table { margin-bottom: 16px; }
-.daily-price { white-space: nowrap; text-decoration: underline dotted; }
 .az-radio-row { display: flex; gap: 24px; }
 .subnet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 16px; }
 .vpc-control { display: flex; align-items: center; gap: 8px; }
@@ -1025,9 +1034,7 @@ function create() {
 .rail-text { color: var(--fg-neutral-t1-3-default); font-size: 12px; line-height: 20px; }
 .rail-text p { margin: 0 0 4px; overflow-wrap: anywhere; }
 .rail-pool + .rail-pool { margin-top: 12px; }
-:deep(.create-summary) { padding: 24px; }
 @media(min-width: 541px) and (max-width: 1100px) { .region-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media(max-width: 900px) { .wizard-grid { grid-template-columns: minmax(0, 1fr); } }
 .create-sections {
     display: flex;
     flex-direction: column;

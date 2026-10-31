@@ -19,7 +19,7 @@ import ArTag from '../components/ui/ArTag.vue'
 import ArCard from '../components/ui/ArCard.vue'
 import ArRadioGroup from '../components/ui/ArRadioGroup.vue'
 import ArRadio from '../components/ui/ArRadio.vue'
-import ArLinkButton from '../components/ui/ArLinkButton.vue'
+import { ArLinkButton } from '../uikit'
 import ArTable from '../components/ui/ArTable.vue'
 import ArTableRow from '../components/ui/ArTableRow.vue'
 import ArTableCell from '../components/ui/ArTableCell.vue'
@@ -320,6 +320,9 @@ function poolOk(p, i, all) {
   if (!p.taints.every((t) => K8S_KEY.test(t.key) && (t.value === '' || K8S_VAL.test(t.value)))) return false
   return true
 }
+const duplicatePoolNames = computed(() => draft.pools.map((p, i) =>
+  draft.pools.some((other, j) => j !== i && poolNameOf(other, j) === poolNameOf(p, i))
+))
 const poolStates = computed(() => draft.pools.map((p, i) => poolOk(p, i, draft.pools)))
 const poolsOk = computed(() => poolStates.value.every(Boolean))
 const canCreate = computed(() => step1Ok.value && poolsOk.value)
@@ -1025,6 +1028,7 @@ function create() {
                     :index="i"
                     :open="openId === p.id"
                     :ok="poolStates[i]"
+                    :duplicate-name="duplicatePoolNames[i]"
                     :allowed-zones="poolAllowedZones"
                     @toggle="togglePool(p.id)"
                     @remove="removePool(p.id)"
@@ -1407,6 +1411,11 @@ function create() {
 .dist-zone.empty { background: transparent; }
 .dz-name { color: var(--fg-neutral-t1-2-default); }
 .dist-zone:not(.empty) .dz-name { color: var(--fg-neutral-t1-1-default); }
+
+@media (min-width: 901px) and (max-width: 1100px) {
+  .wizard-grid:not(.no-rail) { grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); }
+  .wizard-grid:not(.no-rail) .wizard-rail { position: sticky; top: 88px; }
+}
 
 /* review step — full-width layout: the summary rail is hidden on step 3 */
 .wizard-grid.no-rail { grid-template-columns: 1fr; }

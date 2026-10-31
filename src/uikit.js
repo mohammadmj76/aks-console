@@ -6,7 +6,7 @@ import '@panel/uikit/styles.css'
 export { default } from '@panel/uikit'
 export {
   ArAlert, ArBadge, ArButton, ArButtonCopy, ArButtonMenu, ArCard, ArCheckbox, ArContainer, ArField, ArIcon,
-  ArLineAreaChart, ArProductIcon, ArSidePanel,
+  ArLineAreaChart, ArProductIcon, ArSidePanel, ArTooltip,
   ArInput, ArLinkButton, ArModal, ArProgressBar, ArRadio, ArRadioGroup, ArSection, ArSelect, ArSubHeader,
   ArTab, ArTable, ArTableCell, ArTableRow, ArTag, ArPagination,
 } from '@panel/uikit'

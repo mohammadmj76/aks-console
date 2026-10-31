@@ -2,8 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  ArAlert, ArBadge, ArButton, ArButtonCopy, ArField, ArInput, ArLinkButton,
-  ArModal, ArProductIcon, ArSection, ArSelect, ArTable, ArTableCell, ArTableRow, ArTag,
+  ArAlert, ArBadge, ArButton, ArButtonCopy, ArField, ArIcon, ArInput, ArLinkButton,
+  ArModal, ArProductIcon, ArSection, ArSelect, ArTable, ArTableCell, ArTableRow, ArTag, ArTooltip,
 } from '../uikit'
 import { CP_PLANS, REGION, VPCS } from '../data'
 import { downloadKubeconfig, store } from '../store'
@@ -20,7 +20,7 @@ const singleAz = computed(() => props.cluster.cp.distribution ? props.cluster.cp
 const zoneName = id => REGION.zones.find(z => z.id === id)?.name || id
 const distribution = computed(() => singleAz.value ? `Single AZ (${zoneName(props.cluster.cp.zone || subnets.value[0]?.zone || REGION.zones[0].id)})` : 'Multi AZ')
 const status = computed(() => ({ running: ['success', 'Running'], upgrading: ['info', 'Upgrading'], provisioning: ['info', 'Creating'], error: ['danger', 'Error'] })[props.cluster.status] || ['neutral', props.cluster.status])
-const createdAt = computed(() => new Date(props.cluster.createdAt).toLocaleString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }))
+const createdAt = computed(() => new Date(props.cluster.createdAt).toLocaleString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }))
 const renameOpen = ref(false)
 const name = ref('')
 const nameError = computed(() => !/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(name.value) ? 'Use 3–40 lowercase letters, numbers or hyphens, starting with a letter and ending with a letter or number.' : store.clusters.some(c => c.id !== props.cluster.id && c.name === name.value) ? 'A cluster with this name already exists.' : '')
@@ -80,8 +80,15 @@ const visibleEvents = computed(() => {
     (!q || `${e.name} ${e.remarks} ${e.error}`.toLowerCase().includes(q)),
   )
 })
+const hasEventFilters = computed(() => range.value.value !== 'all' || level.value.value !== 'all' || eventName.value.value !== 'all' || query.value.trim() !== '')
+function resetEventFilters() {
+  range.value = ranges[0]
+  level.value = levels[0]
+  eventName.value = { value: 'all', label: 'All Events' }
+  query.value = ''
+}
 watch(() => props.cluster.id, () => {
-  query.value = ''; range.value = ranges[0]; level.value = levels[0]; eventName.value = { value: 'all', label: 'All Events' }
+  resetEventFilters()
   renameOpen.value = false; labelsOpen.value = false; deleteOpen.value = false
 })
 </script>
@@ -92,22 +99,22 @@ watch(() => props.cluster.id, () => {
       <div class="overview-v3__hero">
         <div class="overview-v3__product"><ArProductIcon product="container" type="mono" /></div>
         <div class="overview-v3__intro">
-          <div class="overview-v3__name"><h1>{{ cluster.name }}</h1><ArButton variant="ghost" size="sm" icon="edit" aria-label="Rename cluster" @click="openRename" /></div>
+          <div class="overview-v3__name"><h1>{{ cluster.name }}</h1><ArTooltip content="Rename this cluster"><ArButton variant="ghost" size="sm" icon="edit" aria-label="Rename cluster" @click="openRename" /></ArTooltip></div>
           <p class="overview-v3__created">Date Created: <span>{{ createdAt }}</span></p>
           <ArBadge :variant="status[0]" :text="status[1]" :prepend-icon="status[0] === 'success' ? 'check-circle' : ''" />
-          <div class="overview-v3__labels"><ArBadge v-for="label in cluster.labels" :key="label" variant="neutral" :text="label" /><ArButton variant="ghost" size="sm" prepend-icon="label-plus" @click="openLabels">Add Label</ArButton></div>
+          <div class="overview-v3__labels"><ArBadge v-for="label in cluster.labels" :key="label" variant="neutral" :text="label" /><ArButton variant="ghost" size="sm" prepend-icon="label-plus" @click="openLabels">{{ cluster.labels?.length ? 'Edit Labels' : 'Add Label' }}</ArButton></div>
         </div>
-        <div class="overview-v3__actions"><ArButton variant="ghost" prepend-icon="download" @click="downloadKubeconfig(cluster)">Download Kuber Config</ArButton><ArButton variant="tertiary-danger" prepend-icon="trash" @click="askDelete">Delete Cluster</ArButton></div>
+        <div class="overview-v3__actions"><ArTooltip content="Download a prototype kubeconfig. Replace the IAM token placeholder before using kubectl."><ArButton variant="ghost" prepend-icon="download" @click="downloadKubeconfig(cluster)">Download kubeconfig</ArButton></ArTooltip><ArButton variant="tertiary-danger" prepend-icon="trash" @click="askDelete">Delete Cluster</ArButton></div>
       </div>
       <div class="overview-v3__details">
-        <div><span>Cluster Size</span><strong>{{ plan?.name || cluster.cp.plan }}</strong></div>
-        <div><span>Control Plane Distribution</span><strong>{{ distribution }}</strong></div>
-        <div><span>Cluster ID</span><div class="overview-v3__copy"><strong :title="cluster.id">{{ cluster.id }}</strong><ArButtonCopy :content="cluster.id" aria-label="Copy cluster ID" /></div></div>
+        <div><span class="overview-v3__detail-label">Cluster Size <ArTooltip content="The control-plane plan, not the total worker-node capacity."><ArIcon name="info" size="sm" class="overview-v3__help" tabindex="0" aria-label="About cluster size" /></ArTooltip></span><strong>{{ plan?.name || cluster.cp.plan }}</strong></div>
+        <div><span class="overview-v3__detail-label">Control Plane Distribution <ArTooltip :content="singleAz ? 'Control-plane nodes use one availability zone.' : 'Control-plane nodes are distributed across multiple availability zones.'"><ArIcon name="info" size="sm" class="overview-v3__help" tabindex="0" aria-label="About control plane distribution" /></ArTooltip></span><strong>{{ distribution }}</strong></div>
+        <div><span>Cluster ID</span><div class="overview-v3__copy"><strong :title="cluster.id">{{ cluster.id }}</strong><ArTooltip :content="`Copy cluster ID: ${cluster.id}`"><ArButtonCopy :content="cluster.id" aria-label="Copy cluster ID" /></ArTooltip></div></div>
         <div><span>Cluster Version</span><strong>v {{ cluster.version }}</strong></div>
         <div><span>VPC</span><ArLinkButton @click="emit('network')">{{ vpc?.name || cluster.vpcId }}</ArLinkButton></div>
         <div><span>Subnet</span><ArLinkButton v-for="subnet in subnets" :key="subnet.id" @click="emit('network')">{{ subnet.name }}</ArLinkButton><strong v-if="!subnets.length">—</strong></div>
-        <div><span>Pod Subnet</span><div class="overview-v3__copy"><strong>{{ cluster.podCidr }}</strong><ArButtonCopy :content="cluster.podCidr" aria-label="Copy pod subnet" /></div></div>
-        <div><span>Service Subnet</span><div class="overview-v3__copy"><strong>{{ cluster.svcCidr }}</strong><ArButtonCopy :content="cluster.svcCidr" aria-label="Copy service subnet" /></div></div>
+        <div><span class="overview-v3__detail-label">Pod Subnet <ArTooltip content="The IP address range assigned to pods in this cluster."><ArIcon name="info" size="sm" class="overview-v3__help" tabindex="0" aria-label="About pod subnet" /></ArTooltip></span><div class="overview-v3__copy"><strong>{{ cluster.podCidr }}</strong><ArTooltip content="Copy pod subnet CIDR"><ArButtonCopy :content="cluster.podCidr" aria-label="Copy pod subnet" /></ArTooltip></div></div>
+        <div><span class="overview-v3__detail-label">Service Subnet <ArTooltip content="The virtual IP address range used by Kubernetes Services."><ArIcon name="info" size="sm" class="overview-v3__help" tabindex="0" aria-label="About service subnet" /></ArTooltip></span><div class="overview-v3__copy"><strong>{{ cluster.svcCidr }}</strong><ArTooltip content="Copy service subnet CIDR"><ArButtonCopy :content="cluster.svcCidr" aria-label="Copy service subnet" /></ArTooltip></div></div>
       </div>
     </ArSection>
 
@@ -115,17 +122,17 @@ watch(() => props.cluster.id, () => {
     <ClusterOverviewMonitoring :cluster="cluster" />
 
     <ArSection class="overview-v3__events" content-class="overview-v3__event-content">
-      <template #header><div><h2>O&amp;M Events</h2><p>Recent control-plane and node events.</p></div></template>
-      <div class="overview-v3__filter-label">Filters</div>
+      <template #header><div><h2>O&amp;M Events</h2><p>Operations and maintenance events from the control plane and nodes.</p></div></template>
       <div class="overview-v3__filters">
-        <ArSelect v-model="range" :options="ranges" label="label" track-by="value" :allow-empty="false" aria-label="Event time range" />
-        <ArSelect v-model="level" :options="levels" label="label" track-by="value" :allow-empty="false" aria-label="Event level" />
-        <ArSelect v-model="eventName" :options="eventOptions" label="label" track-by="value" :allow-empty="false" aria-label="Event name" />
+        <div class="overview-v3__filter"><label id="event-range-label">Time range</label><ArSelect v-model="range" :options="ranges" label="label" track-by="value" :allow-empty="false" aria-label="Event time range" aria-labelledby="event-range-label" /></div>
+        <div class="overview-v3__filter"><label id="event-level-label">Level</label><ArSelect v-model="level" :options="levels" label="label" track-by="value" :allow-empty="false" aria-label="Event level" aria-labelledby="event-level-label" /></div>
+        <div class="overview-v3__filter"><label id="event-name-label">Event name</label><ArSelect v-model="eventName" :options="eventOptions" label="label" track-by="value" :allow-empty="false" aria-label="Event name" aria-labelledby="event-name-label" /></div>
       </div>
       <ArInput v-model="query" class="overview-v3__event-search" placeholder="Search events" aria-label="Search events" prepend-icon="search" />
-      <div class="overview-v3__table-scroll"><ArTable :columns="eventColumns" :items="visibleEvents" class="overview-v3__event-table">
+      <div class="overview-v3__event-results"><span role="status">{{ visibleEvents.length }} of {{ events.length }} events</span><ArButton v-if="hasEventFilters" variant="ghost" size="sm" @click="resetEventFilters">Clear filters</ArButton></div>
+      <div class="overview-v3__table-scroll" tabindex="0" role="region" aria-label="Operations and maintenance events table"><ArTable :columns="eventColumns" :items="visibleEvents" class="overview-v3__event-table">
         <template #row="event"><ArTableRow><ArTableCell>{{ event.name }}</ArTableCell><ArTableCell>{{ event.remarks }}</ArTableCell><ArTableCell>{{ event.error }}</ArTableCell><ArTableCell>{{ event.level }}</ArTableCell><ArTableCell>{{ event.generated }}</ArTableCell></ArTableRow></template>
-        <template #noContent>No events match your filters.</template>
+        <template #noContent>{{ hasEventFilters ? 'No events match your filters. Clear filters to see all events.' : 'No events recorded yet.' }}</template>
       </ArTable></div>
       <p class="overview-v3__mock-note">Prototype data. Events without a recorded date are shown by time only and excluded from date filters.</p>
     </ArSection>
@@ -136,7 +143,7 @@ watch(() => props.cluster.id, () => {
     <template #footer><ArButton variant="tertiary" @click="renameOpen = false">Cancel</ArButton><ArButton variant="primary" :disabled="!!nameError" @click="rename">Save name</ArButton></template>
   </ArModal>
   <ArModal v-model="labelsOpen" title="Cluster labels">
-    <ArField label="Labels" :error="!!labelError" :message="labelError"><ArInput v-model="labelInput" placeholder="Confirm labels with Enter" aria-label="New cluster label" @keyup.enter="addLabel" /></ArField>
+    <ArField label="Labels" :error="!!labelError" :message="labelError || 'Press Enter to add a label. Up to 20 labels.'"><ArInput v-model="labelInput" placeholder="Enter a label" aria-label="New cluster label" @keyup.enter="addLabel" /></ArField>
     <div class="overview-v3__edit-labels"><ArTag v-for="label in labels" :key="label" :text="label" :aria-label="`Remove ${label}`" @click="labels = labels.filter(l => l !== label)" /></div>
     <template #footer><ArButton variant="tertiary" @click="labelsOpen = false">Cancel</ArButton><ArButton variant="primary" @click="saveLabels">Save labels</ArButton></template>
   </ArModal>
@@ -163,7 +170,10 @@ watch(() => props.cluster.id, () => {
 .overview-v3__actions { display: flex; gap: 16px; flex-wrap: wrap; justify-content: flex-end; }
 .overview-v3__details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px 0; padding: 12px; border: 1px solid var(--st-neutral-t1-5-default); border-radius: 8px; }
 .overview-v3__details > div { min-width: 0; border-left: 1px solid var(--st-neutral-t1-5-default); padding: 0 8px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.overview-v3__details > div > span { color: var(--fg-neutral-t1-3-default); font-size: 14px; line-height: 20px; }
+.overview-v3__details > div > span, .overview-v3__help { color: var(--fg-neutral-t1-3-default); font-size: 14px; line-height: 20px; }
+.overview-v3__detail-label { display: flex; align-items: center; gap: 4px; }
+.overview-v3__help { flex: none; cursor: help; }
+.overview-v3__help:hover { color: var(--fg-neutral-t1-2-default); }
 .overview-v3__details strong { font-size: 14px; line-height: 20px; font-weight: 500; overflow-wrap: anywhere; }
 .overview-v3__copy { display: flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; }
 .overview-v3__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -171,11 +181,14 @@ watch(() => props.cluster.id, () => {
 .overview-v3__details :deep(.v11-1-0-ArLinkButton) { text-align: left; text-decoration: underline; }
 .overview-v3__events :deep(.v11-1-0-ArSection__section--header) { border-bottom: 1px solid var(--st-neutral-t1-5-default); }
 :deep(.overview-v3__event-content) { padding: 48px; }
-.overview-v3__filter-label { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
 .overview-v3__filters { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
-.overview-v3__filters > * { width: 160px; }
-.overview-v3__event-search { margin-bottom: 16px; }
+.overview-v3__filter { display: flex; flex-direction: column; gap: 8px; width: 180px; }
+.overview-v3__filter label { font-size: 14px; line-height: 20px; }
+.overview-v3__event-search { margin-bottom: 8px; }
+.overview-v3__event-results { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 32px; margin-bottom: 8px; color: var(--fg-neutral-t1-3-default); font-size: 12px; }
 .overview-v3__table-scroll { overflow-x: auto; }
+.overview-v3__table-scroll:focus-visible, .overview-v3__help:focus-visible { outline: 2px solid var(--st-primary-t1-1-default); outline-offset: 4px; }
+.overview-v3__event-table :deep(.v11-1-0-ArTable__tableWrapper) { overflow: visible; padding-bottom: 0; }
 .overview-v3__event-table :deep(table) { min-width: 780px; table-layout: fixed; }
 .overview-v3__event-table :deep(th), .overview-v3__event-table :deep(td) { padding: 12px 8px; font-size: 14px; line-height: 20px; border-bottom: 1px solid var(--st-neutral-t1-5-default); white-space: normal; overflow-wrap: anywhere; }
 .overview-v3__event-table :deep(th) { color: var(--fg-neutral-t1-3-default); font-weight: 400; position: relative; }
@@ -194,6 +207,6 @@ watch(() => props.cluster.id, () => {
   .overview-v3__product { width: 64px; height: 64px; }
   .overview-v3__actions { justify-content: flex-start; gap: 8px; }
   :deep(.overview-v3__event-content) { padding: 24px 12px; }
-  .overview-v3__filters > * { width: 100%; }
+  .overview-v3__filter { width: 100%; }
 }
 </style>
