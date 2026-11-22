@@ -9,7 +9,7 @@ import {
 import {
     ArButton, ArBadge, ArCheckbox, ArSelect, ArSection, ArField,
     ArInput, ArAlert, ArTag, ArCard, ArRadio, ArLinkButton,
-    ArTable, ArTableRow, ArTableCell, ArIcon, ArTab,
+    ArTable, ArTableRow, ArTableCell, ArIcon, ArTab, ArTooltip,
 } from '../uikit'
 import PoolCard from '../components/create/PoolCard.vue'
 
@@ -126,21 +126,41 @@ const nameMessage = computed(() => {
     }
     return 'Lowercase letters, digits and dashes. 3–40 characters.'
 })
-/* Multi AZ requires at least one subnet per availability zone */
+/* Multi AZ requires at least one subnet per availability zone, and every
+   chosen subnet must have an attached network gateway */
+const subnetById = (id) => vpc.value?.subnets.find((s) => s.id === id)
 const selectedSubnetZones = computed(() =>
-    [...new Set(draft.subnetIds.map((id) => vpc.value?.subnets.find((s) => s.id === id)?.zone).filter(Boolean))]
+    [...new Set(draft.subnetIds.map((id) => subnetById(id)?.zone).filter(Boolean))]
 )
 const missingAzSubnets = computed(() =>
     REGION.zones.map((z) => z.id).filter((z) => !selectedSubnetZones.value.includes(z))
 )
+/* zones whose only subnets lack a network gateway — those AZs can never satisfy Multi AZ */
+const zonesWithoutGateway = computed(() => {
+    if (!vpc.value) return []
+    return REGION.zones
+        .map((z) => z.id)
+        .filter((z) => !(vpc.value.subnets.some((s) => s.zone === z && s.gateway)))
+})
+const gatewaylessSelected = computed(() =>
+    draft.subnetIds.map((id) => subnetById(id)).filter((s) => s && !s.gateway)
+)
 const subnetOk = computed(() => {
     if (!draft.subnetIds.length) return false
+    if (gatewaylessSelected.value.length) return false
     if (masterDist.value !== 'automatic') return true
     return missingAzSubnets.value.length === 0
 })
 const subnetError = computed(() => {
+    if (gatewaylessSelected.value.length) {
+        const zones = [...new Set(gatewaylessSelected.value.map((s) => zoneName(s.zone)))].join(', ')
+        return `Subnets without internet access (a NAT gateway) cannot be used by the cluster — remove ${gatewaylessSelected.value.map((s) => s.name).join(', ')} (${zones}) or attach a NAT gateway to them first.`
+    }
     if (masterDist.value === 'custom' && vpc.value && !singleAzSubnets.value.length) {
         return `No subnet in ${REGION.zones.find((z) => z.id === masterHostAz.value)?.name} for this VPC — choose a different AZ or VPC.`
+    }
+    if (masterDist.value === 'automatic' && vpc.value && zonesWithoutGateway.value.length) {
+        return `Every availability zone needs a subnet with internet access (a NAT gateway) — ${zonesWithoutGateway.value.map((z) => REGION.zones.find((zz) => zz.id === z)?.name).join(', ')} has none. Attach a NAT gateway there or choose a different VPC.`
     }
     if (masterDist.value === 'automatic' && vpc.value && missingAzSubnets.value.length) {
         return `Multi AZ requires a subnet in every availability zone — missing: ${missingAzSubnets.value.map((z) => REGION.zones.find((zz) => zz.id === z)?.name).join(', ')}.`
@@ -274,6 +294,8 @@ function selectRegion(r) {
     if (r.enabled) regionId.value = r.id
 }
 function toggleSubnet(id) {
+    /* subnets without an attached network gateway cannot serve the cluster */
+    if (!subnetById(id)?.gateway) return
     if (masterDist.value === 'custom') {
         /* Single AZ: one subnet only (radio behaviour — clicking the selected row keeps it) */
         draft.subnetIds = draft.subnetIds[0] === id ? draft.subnetIds : [id]
@@ -282,8 +304,11 @@ function toggleSubnet(id) {
         i >= 0 ? draft.subnetIds.splice(i, 1) : draft.subnetIds.push(id)
     }
 }
-/* subnets outside the chosen AZ are locked in Single AZ mode */
+/* subnets outside the chosen AZ are locked in Single AZ mode; gatewayless subnets are never selectable */
 const subnetLocked = (sn) => masterDist.value === 'custom' && sn.zone !== masterHostAz.value
+const subnetBlocked = (sn) => !sn.gateway
+const GATEWAY_TIP = 'Internet access for this subnet is provided by a NAT gateway. A cluster subnet must have one attached — nodes cannot pull images or reach the internet without it. Attach a NAT gateway to this subnet in the VPC section, then select it.'
+const GATEWAY_COLUMN_TIP = 'Required for every subnet the cluster uses. Internet access is provided by a NAT gateway attached to the subnet; subnets without one cannot be selected.'
 const singleAzSubnets = computed(() =>
     masterDist.value === 'custom' ? (vpc.value?.subnets || []).filter((sn) => sn.zone === masterHostAz.value) : []
 )
@@ -338,7 +363,7 @@ const SUBNET_COLUMNS = [
     { label: 'Name', name: 'name' },
     { label: 'IPv4 CIDR', name: 'cidr' },
     { label: 'AZ', name: 'zone' },
-    { label: 'Network Gateway', name: 'gateway' },
+    { label: 'Internet Access *', name: 'gateway' },
     { label: 'Status', name: 'status' },
 ]
 
@@ -660,40 +685,50 @@ function create() {
                                     :columns="SUBNET_COLUMNS"
                                     :items="visibleSubnets"
                                 >
+                                    <template #header-gateway>
+                                        <ArTableCell header>
+                                            <span class="gateway-col-head">Internet Access * <ArTooltip :content="GATEWAY_COLUMN_TIP"><ArIcon name="info" size="sm" class="info-icon" tabindex="0" :aria-label="`Internet Access: ${GATEWAY_COLUMN_TIP}`" /></ArTooltip></span>
+                                        </ArTableCell>
+                                    </template>
                                     <template #row="sn">
                                         <ArTableRow
                                             :key="sn.id"
                                             class="subnet-row"
                                             :class="{
                                                 selected: draft.subnetIds.includes(sn.id),
-                                                'row-locked': subnetLocked(sn),
+                                                'row-locked': subnetLocked(sn) || subnetBlocked(sn),
                                             }"
-                                            @click="!subnetLocked(sn) && toggleSubnet(sn.id)"
+                                            @click="toggleSubnet(sn.id)"
                                         >
                                             <ArTableCell @click.stop>
                                                 <ArRadio
                                                     v-if="masterDist === 'custom'"
                                                     :model-value="draft.subnetIds[0] || ''"
                                                     :value="sn.id"
-                                                    :disabled="subnetLocked(sn)"
+                                                    :disabled="subnetLocked(sn) || subnetBlocked(sn)"
                                                     @update:model-value="toggleSubnet(sn.id)"
                                                 />
                                                 <ArCheckbox
                                                     v-else
                                                     :model-value="draft.subnetIds.includes(sn.id)"
+                                                    :disabled="subnetBlocked(sn)"
                                                     @update:model-value="toggleSubnet(sn.id)"
                                                 />
                                             </ArTableCell>
                                             <ArTableCell>
-                                                <ArLinkButton @click.stop="toggleSubnet(sn.id)">{{ sn.name }}</ArLinkButton>
+                                                <ArLinkButton v-if="!subnetBlocked(sn)" @click.stop="toggleSubnet(sn.id)">{{ sn.name }}</ArLinkButton>
+                                                <span v-else class="subnet-name-static" v-tippy="{ ...TIPPY_TOP, content: GATEWAY_TIP }">{{ sn.name }}</span>
                                             </ArTableCell>
                                             <ArTableCell class="mono">
                                                 {{ sn.cidr }}
                                             </ArTableCell>
                                             <ArTableCell>{{ REGION.zones.find((z) => z.id === sn.zone)?.name }}</ArTableCell>
                                             <ArTableCell>
-                                                <ArBadge v-if="sn.zone !== 'simin'" variant="success" prepend-icon="check-circle" text="Attached" />
-                                                <ArLinkButton v-else @click="store.toast('info', 'Network Gateway', 'Gateway configuration is not connected in this prototype.')">Enable</ArLinkButton>
+                                                <ArBadge v-if="sn.gateway" variant="success" prepend-icon="check-circle" text="Attached" />
+                                                <span v-else class="gateway-missing" v-tippy="{ ...TIPPY_TOP, content: GATEWAY_TIP }">
+                                                    <ArBadge variant="warning" prepend-icon="warning" text="No NAT gateway" />
+                                                    <ArIcon name="info" size="xs" class="info-icon" tabindex="0" :aria-label="GATEWAY_TIP" />
+                                                </span>
                                             </ArTableCell>
                                             <ArTableCell>
                                                 <ArBadge
@@ -1099,6 +1134,9 @@ function create() {
 .subnet-row.selected { background: var(--bg-primary-t2-1-default); }
 .subnet-row.row-locked,
 .subnet-row.row-locked:hover { opacity: 0.45; cursor: not-allowed; background: transparent; }
+.subnet-name-static { color: var(--fg-neutral-t1-2-default); }
+.gateway-missing { display: inline-flex; align-items: center; gap: 4px; }
+.gateway-col-head { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 
 /* pool accordion list — same as the stepper flow */
 .pool-list { display: flex; flex-direction: column; gap: var(--space-4); }

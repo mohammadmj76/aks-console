@@ -11,4 +11,7 @@ export {
   ArTab, ArTable, ArTableCell, ArTableRow, ArTag, ArPagination,
 } from '@panel/uikit'
 
+/* product names accepted by ArProductIcon (mirrors its PRODUCT constant) */
+export const PRODUCT_ICON = { CONTAINER: 'container' }
+
 export const installUIKit = (app) => app.use(PortalVue).use(UIKit, { locale: 'en' })

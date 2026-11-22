@@ -3,10 +3,10 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { store, downloadKubeconfig } from '../store'
 import { REGION, fmtDate } from '../data'
+import { ArProductIcon } from '../uikit'
 import ArBadge from '../components/ui/ArBadge.vue'
 import ArButton from '../components/ui/ArButton.vue'
 import ArDataTableServer from '../components/ui/ArDataTableServer.vue'
-import ArEmpty from '../components/ui/ArEmpty.vue'
 import ArIcon from '../components/ui/ArIcon.vue'
 import ArRadio from '../components/ui/ArRadio.vue'
 import ArRadioGroup from '../components/ui/ArRadioGroup.vue'
@@ -287,23 +287,31 @@ function saveLabels() {
       </ArDataTableServer>
       </ArSection>
 
-      <ArSection v-else>
-        <template #header>
-          <div class="list-head-txt">
-            <div class="list-title-row">
-              <h6 class="text-body-1" style="margin: 0">Cluster List</h6>
-              <ArBadge variant="info" text="Beta" />
-            </div>
-          </div>
-          <div class="list-head-actions">
-            <router-link to="/clusters/create" class="ar-btn primary" style="text-decoration: none">
+      <!-- empty state: no clusters in this region at all (matches the real panel) -->
+      <div v-else class="cluster-empty" aria-label="No Kubernetes clusters yet">
+        <div class="cluster-empty__hero">
+          <div class="cluster-empty__stack">
+            <ArProductIcon product="container" class="cluster-empty__icon" />
+            <h1 class="cluster-empty__title">Kubernetes Cluster</h1>
+            <p class="cluster-empty__desc">
+              Kubernetes runs your applications in containers across a group of connected servers. It places each container on the server with the right resources and restarts any container that stops, so your applications stay available.
+            </p>
+            <router-link to="/clusters/create" class="ar-btn secondary cluster-empty__cta" style="text-decoration: none">
               <ArIcon name="plus" size="sm" />
-              Create Kubernetes Cluster
+              Create Cluster
             </router-link>
           </div>
-        </template>
-        <ArEmpty title="No clusters yet" desc="Create your first cluster to get started." />
-      </ArSection>
+          <div class="cluster-empty__card">
+            <div class="cluster-empty__card-icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
+            </div>
+            <div class="cluster-empty__card-body">
+              <h2>What is a Kubernetes Cluster?</h2>
+              <p>A group of servers that runs your containerized applications and keeps them running.</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- advanced filters (Filter button side panel) -->
@@ -383,6 +391,97 @@ function saveLabels() {
   margin: 0 auto;
   padding: var(--space-6) var(--space-6) var(--space-12);
   width: 100%;
+}
+
+/* empty state: hero card on a contour background, like the real panel */
+.cluster-empty__hero {
+  position: relative;
+  overflow: hidden;
+  padding: 64px 24px 24px;
+  border-radius: var(--radius-xlg);
+  background: var(--bg-neutral-t1-1-default);
+  text-align: center;
+}
+.cluster-empty__hero::before,
+.cluster-empty__hero::after {
+  content: '';
+  position: absolute;
+  width: 560px;
+  height: 560px;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+/* topographic contour decoration (decorative artwork, not a control) */
+.cluster-empty__hero::before {
+  top: -120px;
+  left: -160px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200' fill='none'%3E%3Cg stroke='%23f6d5d5' stroke-width='1'%3E%3Cpath d='M-20 40c40-30 90-38 130-18s70 20 110-6'/%3E%3Cpath d='M-20 70c45-32 95-40 135-20s65 18 105-8'/%3E%3Cpath d='M-20 100c50-34 100-42 140-22s60 16 100-10'/%3E%3Cpath d='M-20 130c55-36 105-44 145-24s55 14 95-12'/%3E%3C/g%3E%3C/svg%3E");
+  opacity: 0.9;
+}
+.cluster-empty__hero::after {
+  bottom: -140px;
+  right: -160px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200' fill='none'%3E%3Cg stroke='%23cdeae9' stroke-width='1'%3E%3Cpath d='M-20 30c40-28 90-36 130-16s70 20 110-6'/%3E%3Cpath d='M-20 60c45-30 95-38 135-18s65 18 105-8'/%3E%3Cpath d='M-20 90c50-32 100-40 140-20s60 16 100-10'/%3E%3Cpath d='M-20 120c55-34 105-42 145-22s55 14 95-12'/%3E%3Cpath d='M-20 150c60-36 110-44 150-24s50 12 90-14'/%3E%3C/g%3E%3C/svg%3E");
+  opacity: 0.9;
+}
+.cluster-empty__stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.cluster-empty__icon { width: 168px; height: 168px; }
+.cluster-empty__icon svg { width: 100%; height: 100%; }
+.cluster-empty__title {
+  margin: 0;
+  font-size: 40px;
+  line-height: 56px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  color: var(--fg-neutral-t1-1-default);
+}
+.cluster-empty__desc {
+  margin: -8px 0 0;
+  max-width: 640px;
+  color: var(--fg-neutral-t1-3-default);
+  font-size: 14px;
+  line-height: 20px;
+}
+.cluster-empty__cta { height: 40px; padding: 0 16px; }
+.cluster-empty__card {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 16px;
+  border: 1px solid var(--st-neutral-t1-5-default);
+  border-radius: var(--radius-md);
+  text-align: left;
+  background: var(--bg-neutral-t1-1-default);
+}
+.cluster-empty__card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg-neutral-t1-4-default);
+  color: var(--fg-neutral-t1-2-default);
+}
+.cluster-empty__card-body h2 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--fg-neutral-t1-1-default); }
+.cluster-empty__card-body p { margin: 4px 0 0; color: var(--fg-neutral-t1-3-default); font-size: 14px; line-height: 20px; }
+@media (max-width: 640px) {
+  .cluster-empty__hero { padding: 40px 16px 16px; }
+  .cluster-empty__title { font-size: 28px; line-height: 40px; }
+  .cluster-empty__icon { width: 120px; height: 120px; }
+  .cluster-empty__card { text-align: left; }
 }
 
 /* ArSection #header slot: text block left, create action right */

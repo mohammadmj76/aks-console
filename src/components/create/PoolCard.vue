@@ -557,7 +557,12 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
 
       <template v-if="designRefresh">
         <div v-if="!allowedZones.length" class="creation-azs">
-          <span class="text-body-2">{{ configurationOnly ? 'Node Creation AZs' : 'AZs for Node Creation' }}<span v-if="configurationOnly" class="required-mark">*</span></span>
+          <span class="text-body-2 k-tip">
+            <span>Node Location<span v-if="configurationOnly" class="required-mark">*</span></span>
+            <UIKit.ArTooltip content="Specifies where the worker nodes in this pool will be created. Select one or more availability zones and set the node count for each zone.">
+              <UIKit.ArIcon name="info" size="sm" class="info-icon" tabindex="0" aria-label="About node location" />
+            </UIKit.ArTooltip>
+          </span>
           <ArTable :columns="AZ_COUNT_COLUMNS" :items="creationAzRows" class="creation-az-table">
             <template #row="row">
               <ArTableRow :key="row.id">

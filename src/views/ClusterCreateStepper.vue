@@ -153,6 +153,7 @@ const missingAzSubnets = computed(() =>
 )
 const subnetOk = computed(() => {
   if (!draft.subnetIds.length) return false
+  if (draft.subnetIds.some((id) => !vpc.value?.subnets.find((s) => s.id === id)?.gateway)) return false
   if (masterDist.value !== 'automatic') return true
   return missingAzSubnets.value.length === 0
 })
@@ -163,6 +164,12 @@ const subnetMessage = computed(() => {
   return 'Pick one subnet per availability zone you want worker nodes in.'
 })
 const subnetError = computed(() => {
+  const gatewayless = draft.subnetIds
+    .map((id) => vpc.value?.subnets.find((s) => s.id === id))
+    .filter((s) => s && !s.gateway)
+  if (gatewayless.length) {
+    return `Subnets without internet access (a NAT gateway) cannot be used by the cluster — remove ${gatewayless.map((s) => s.name).join(', ')} or attach a NAT gateway to them first.`
+  }
   if (masterDist.value === 'custom' && vpc.value && !singleAzSubnets.value.length) {
     return `No subnet in ${REGION.zones.find((z) => z.id === masterHostAz.value)?.name} for this VPC — choose a different AZ or VPC.`
   }
@@ -273,6 +280,8 @@ function selectRegion(r) {
   if (r.enabled) regionId.value = r.id
 }
 function toggleSubnet(id) {
+  /* subnets without an attached network gateway cannot serve the cluster */
+  if (!vpc.value?.subnets.find((s) => s.id === id)?.gateway) return
   if (masterDist.value === 'custom') {
     /* Single AZ: one subnet only (radio behaviour — clicking the selected row keeps it) */
     draft.subnetIds = draft.subnetIds[0] === id ? draft.subnetIds : [id]
@@ -281,8 +290,10 @@ function toggleSubnet(id) {
     i >= 0 ? draft.subnetIds.splice(i, 1) : draft.subnetIds.push(id)
   }
 }
-/* subnets outside the chosen AZ are locked in Single AZ mode */
-const subnetLocked = (sn) => masterDist.value === 'custom' && sn.zone !== masterHostAz.value
+/* subnets outside the chosen AZ are locked in Single AZ mode; gatewayless subnets are never selectable */
+const subnetLocked = (sn) => (masterDist.value === 'custom' && sn.zone !== masterHostAz.value) || !sn.gateway
+const GATEWAY_TIP = 'Internet access for this subnet is provided by a NAT gateway. A cluster subnet must have one attached — nodes cannot pull images or reach the internet without it. Attach a NAT gateway to this subnet in the VPC section, then select it.'
+const GATEWAY_COLUMN_TIP = 'Required for every subnet the cluster uses. Internet access is provided by a NAT gateway attached to the subnet; subnets without one cannot be selected.'
 const singleAzSubnets = computed(() =>
   masterDist.value === 'custom' ? (vpc.value?.subnets || []).filter((sn) => sn.zone === masterHostAz.value) : []
 )
@@ -741,6 +752,11 @@ function create() {
                         :items="vpc?.subnets || []"
                         key-field="id"
                       >
+                        <template #header-status>
+                          <ArTableCell header>
+                            <span class="gateway-col-head">Internet Access * <ArTooltip :content="GATEWAY_COLUMN_TIP"><ArIcon name="info" size="sm" class="info-icon" tabindex="0" :aria-label="`Internet Access: ${GATEWAY_COLUMN_TIP}`" /></ArTooltip></span>
+                          </ArTableCell>
+                        </template>
                         <template #row="sn">
                           <ArTableRow
                             :key="sn.id"
@@ -761,22 +777,38 @@ function create() {
                               <ArCheckbox
                                 v-else
                                 :model-value="draft.subnetIds.includes(sn.id)"
+                                :disabled="!sn.gateway"
                                 @update:model-value="toggleSubnet(sn.id)"
                               />
                             </ArTableCell>
                             <ArTableCell>
                               <a
+                                v-if="sn.gateway"
                                 href="#"
                                 class="text-body-2-strong"
                                 @click.prevent.stop
                               >{{ sn.name }}</a>
+                              <span
+                                v-else
+                                class="text-body-2-strong subnet-name-static"
+                                v-tippy="{ ...TIPPY_TOP, content: GATEWAY_TIP }"
+                              >{{ sn.name }}</span>
                             </ArTableCell>
                             <ArTableCell class="mono">
                               {{ sn.cidr }}
                             </ArTableCell>
                             <ArTableCell>{{ REGION.zones.find((z) => z.id === sn.zone)?.name }}</ArTableCell>
                             <ArTableCell>
+                              <span
+                                v-if="!sn.gateway"
+                                class="gateway-missing"
+                                v-tippy="{ ...TIPPY_TOP, content: GATEWAY_TIP }"
+                              >
+                                <ArBadge variant="warning" pill text="No NAT gateway" />
+                                <ArIcon name="info" size="xs" class="info-icon" tabindex="0" :aria-label="GATEWAY_TIP" />
+                              </span>
                               <ArBadge
+                                v-else
                                 variant="success"
                                 pill
                                 text="Available"
@@ -1371,6 +1403,9 @@ function create() {
 
 /* subnet table rows (ArTable) */
 .subnet-row { cursor: pointer; }
+.subnet-name-static { color: var(--fg-neutral-t1-2-default); }
+.gateway-missing { display: inline-flex; align-items: center; gap: 4px; }
+.gateway-col-head { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .subnet-row:hover { background: var(--bg-neutral-t1-4-default); }
 .subnet-row.selected { background: var(--bg-primary-t2-1-default); }
 .subnet-row.row-locked,

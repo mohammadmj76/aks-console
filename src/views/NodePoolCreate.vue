@@ -28,9 +28,18 @@ const nodeZones = computed(() => pool.specs[0]?.zones || [])
 const zoneName = id => REGION.zones.find(z => z.id === id)?.name || id
 const selectedSubnets = computed(() => visibleSubnets.value.filter(s => subnetIds.value.includes(s.id)))
 const missingZones = computed(() => nodeZones.value.filter(z => !selectedSubnets.value.some(s => s.zone === z)))
+/* subnets without an attached network gateway cannot serve the cluster */
+const gatewaylessSelected = computed(() => selectedSubnets.value.filter(s => !s.gateway))
+const zonesWithoutGateway = computed(() =>
+  nodeZones.value.filter(z => !(visibleSubnets.value.some(s => s.zone === z && s.gateway)))
+)
+const GATEWAY_TIP = 'Internet access for this subnet is provided by a NAT gateway. A cluster subnet must have one attached — nodes cannot pull images or reach the internet without it. Attach a NAT gateway to this subnet in the VPC section, then select it.'
+const GATEWAY_COLUMN_TIP = 'Required for every subnet the cluster uses. Internet access is provided by a NAT gateway attached to the subnet; subnets without one cannot be selected.'
 const subnetMessage = computed(() => {
-  if (!nodeZones.value.length) return 'Select a flavor and its node creation AZs first.'
-  if (missingZones.value.length) return `${singleAz.value ? 'Single AZ' : 'Multi AZ'} requires a subnet in every node creation availability zone. Missing: ${missingZones.value.map(zoneName).join(', ')}.`
+  if (!nodeZones.value.length) return 'Select a flavor and the availability zones for your nodes first.'
+  if (gatewaylessSelected.value.length) return `Subnets without internet access (a NAT gateway) cannot be used — remove ${gatewaylessSelected.value.map(s => s.name).join(', ')} or attach a NAT gateway first.`
+  if (zonesWithoutGateway.value.length) return `No subnet with internet access (a NAT gateway) exists in: ${zonesWithoutGateway.value.map(zoneName).join(', ')}. Attach a NAT gateway to a subnet there, then select it.`
+  if (missingZones.value.length) return `${singleAz.value ? 'Single AZ' : 'Multi AZ'} requires a subnet in each selected availability zone. Missing: ${missingZones.value.map(zoneName).join(', ')}.`
   return ''
 })
 watch(() => route.params.id, () => {
@@ -42,6 +51,7 @@ watch(() => route.params.id, () => {
   subnetIds.value = []
 })
 function toggleSubnet(s) {
+  if (!s.gateway) return
   if (singleAz.value) subnetIds.value = [s.id]
   else subnetIds.value = subnetIds.value.includes(s.id) ? subnetIds.value.filter(id => id !== s.id) : [...subnetIds.value, s.id]
 }
@@ -66,13 +76,13 @@ const validFlavor = computed(() => pool.specs.length === 1 && nodeZones.value.le
 const canCreate = computed(() => Boolean(cluster.value && vpc.value && nameValid.value && !duplicateName.value && validFlavor.value &&
   Number.isInteger(pool.count) && pool.count >= 1 && pool.count <= 20 &&
   Number.isInteger(pool.rootDisk) && pool.rootDisk >= 25 && pool.rootDisk <= 1000 &&
-  !missingZones.value.length && selectedSubnets.value.length))
+  !missingZones.value.length && !gatewaylessSelected.value.length && !zonesWithoutGateway.value.length && selectedSubnets.value.length))
 const hourlyPrice = computed(() => selectedFlavor.value ?
   (selectedFlavor.value.pricePerHour + pool.rootDisk * VOLUME_PRICE_PER_GB / 730) * pool.count : 0)
 const SUBNET_COLUMNS = [
   { name: 'check', label: '' }, { name: 'name', label: 'Name' },
   { name: 'cidr', label: 'IPv4 CIDR' }, { name: 'zone', label: 'AZ' },
-  { name: 'gateway', label: 'Network Gateway' }, { name: 'status', label: 'Status' },
+  { name: 'gateway', label: 'Internet Access *' }, { name: 'status', label: 'Status' },
 ]
 const submitting = ref(false)
 function create() {
@@ -142,18 +152,28 @@ function createSubnet() {
                   <ArButton variant="secondary" prepend-icon="plus" @click="createSubnet">Create Subnet</ArButton>
                 </div>
                 <ArTable :columns="SUBNET_COLUMNS" :items="visibleSubnets">
+                  <template #header-gateway>
+                    <ArTableCell header>
+                      <span class="node-pool-create__gateway-head">Internet Access * <ArTooltip :content="GATEWAY_COLUMN_TIP"><ArIcon name="info" size="sm" class="info-icon" tabindex="0" :aria-label="`Internet Access: ${GATEWAY_COLUMN_TIP}`" /></ArTooltip></span>
+                    </ArTableCell>
+                  </template>
                   <template #row="s">
-                    <ArTableRow class="node-pool-create__subnet-row" @click="toggleSubnet(s)">
+                    <ArTableRow class="node-pool-create__subnet-row" :class="{ 'is-blocked': !s.gateway }" @click="toggleSubnet(s)">
                       <ArTableCell @click.stop>
-                        <ArRadio v-if="singleAz" :model-value="subnetIds[0] || ''" :value="s.id" @update:model-value="toggleSubnet(s)" />
-                        <ArCheckbox v-else :model-value="subnetIds.includes(s.id)" :aria-label="`Select ${s.name}`" @update:model-value="toggleSubnet(s)" />
+                        <ArRadio v-if="singleAz" :model-value="subnetIds[0] || ''" :value="s.id" :disabled="!s.gateway" @update:model-value="toggleSubnet(s)" />
+                        <ArCheckbox v-else :model-value="subnetIds.includes(s.id)" :disabled="!s.gateway" :aria-label="`Select ${s.name}`" @update:model-value="toggleSubnet(s)" />
                       </ArTableCell>
-                      <ArTableCell><ArLinkButton @click.stop="toggleSubnet(s)">{{ s.name }}</ArLinkButton></ArTableCell>
+                      <ArTableCell>
+                        <ArLinkButton v-if="s.gateway" @click.stop="toggleSubnet(s)">{{ s.name }}</ArLinkButton>
+                        <span v-else v-tippy="{ placement: 'top', arrow: true, content: GATEWAY_TIP }">{{ s.name }}</span>
+                      </ArTableCell>
                       <ArTableCell>{{ s.cidr }}</ArTableCell>
                       <ArTableCell>{{ zoneName(s.zone) }}</ArTableCell>
                       <ArTableCell>
-                        <ArBadge v-if="s.zone !== 'simin'" variant="success" text="Attached" />
-                        <ArLinkButton v-else @click.stop="store.toast('info', 'Network Gateway', 'Gateway configuration is not connected in this prototype.')">Enable</ArLinkButton>
+                        <ArBadge v-if="s.gateway" variant="success" text="Attached" />
+                        <span v-else class="node-pool-create__gateway-missing" v-tippy="{ placement: 'top', arrow: true, content: GATEWAY_TIP }">
+                          <ArBadge variant="warning" text="No NAT gateway" />
+                        </span>
                       </ArTableCell>
                       <ArTableCell><ArBadge variant="success" text="Available" /></ArTableCell>
                     </ArTableRow>
@@ -177,7 +197,7 @@ function createSubnet() {
           <section class="node-pool-create__summary-group">
             <h2>Node Pool Configuration</h2>
             <p>Flavor: <span>{{ selectedFlavor ? `${selectedFlavor.id} | ${selectedFlavor.vcpu} vCPU | ${selectedFlavor.ram} GB RAM` : '—' }}</span></p>
-            <p>Node Creation AZs: <span>{{ nodeZones.map(zoneName).join(', ') || '—' }}</span></p>
+            <p>Node Location: <span>{{ nodeZones.map(zoneName).join(', ') || '—' }}</span></p>
             <p>Node Count: <span>{{ pool.count || '—' }}</span></p>
             <p>Root Volume: <span>{{ pool.rootDisk || '—' }} GB</span></p>
           </section>
@@ -216,6 +236,9 @@ function createSubnet() {
 .node-pool-create__subnets { border: 1px solid var(--st-neutral-t1-5-default); border-radius: 8px; padding: 20px; min-width: 0; }
 .node-pool-create__subnet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 16px; }
 .node-pool-create__subnet-row { cursor: pointer; }
+.node-pool-create__subnet-row.is-blocked { opacity: 0.45; cursor: not-allowed; }
+.node-pool-create__gateway-missing { display: inline-flex; align-items: center; gap: 4px; }
+.node-pool-create__gateway-head { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .node-pool-create__subnet-message { font-size: 12px; line-height: 20px; margin: 16px 0 0; color: var(--fg-neutral-t1-3-default); }
 .node-pool-create__summary { min-width: 0; }
 :deep(.node-pool-create__summary-content) { display: flex; flex-direction: column; padding: 24px; }

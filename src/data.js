@@ -81,9 +81,9 @@ export const VPCS = [
     name: 'VPC-Name',
     cidr: '192.168.0.0/16',
     subnets: [
-      { id: 'sn-prod-foroogh', name: 'Subnet Name', cidr: '192.168.1.1/24', zone: 'foroogh' },
-      { id: 'sn-prod-bamdad', name: 'Subnet Name 2', cidr: '192.168.2.0/24', zone: 'bamdad' },
-      { id: 'sn-prod-simin', name: 'Subnet Name 3', cidr: '192.168.3.0/24', zone: 'simin' },
+      { id: 'sn-prod-foroogh', name: 'Subnet Name', cidr: '192.168.1.1/24', zone: 'foroogh', gateway: true },
+      { id: 'sn-prod-bamdad', name: 'Subnet Name 2', cidr: '192.168.2.0/24', zone: 'bamdad', gateway: true },
+      { id: 'sn-prod-simin', name: 'Subnet Name 3', cidr: '192.168.3.0/24', zone: 'simin', gateway: false },
     ],
   },
   {
@@ -91,8 +91,8 @@ export const VPCS = [
     name: 'VPC-Staging',
     cidr: '10.10.0.0/16',
     subnets: [
-      { id: 'sn-stg-foroogh', name: 'Staging Subnet 1', cidr: '10.10.1.0/24', zone: 'foroogh' },
-      { id: 'sn-stg-bamdad', name: 'Staging Subnet 2', cidr: '10.10.2.0/24', zone: 'bamdad' },
+      { id: 'sn-stg-foroogh', name: 'Staging Subnet 1', cidr: '10.10.1.0/24', zone: 'foroogh', gateway: false },
+      { id: 'sn-stg-bamdad', name: 'Staging Subnet 2', cidr: '10.10.2.0/24', zone: 'bamdad', gateway: true },
     ],
   },
 ]

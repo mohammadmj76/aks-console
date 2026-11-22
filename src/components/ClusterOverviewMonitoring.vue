@@ -86,6 +86,8 @@ const columns = [
   { name: 'index', label: '' }, { name: 'name', label: 'Name' }, { name: 'status', label: 'Status' },
   { name: 'az', label: 'AZ' }, { name: 'cpu', label: 'CPU Usage' }, { name: 'ram', label: 'RAM Usage' }, { name: 'monitor', label: '' },
 ]
+/* the control plane node lifecycle has exactly two states */
+const STATUS_TIP = 'A control plane node has one of two statuses. Ready: the node is connected to the cluster and running its control plane role. NotReady: the node has stopped reporting to the cluster and is not currently part of it.'
 const nodes = computed(() => {
   const cp = props.cluster.cp
   const single = cp.distribution ? cp.distribution === 'single-az' : !cp.ha
@@ -95,11 +97,12 @@ const nodes = computed(() => {
   return Array.from({ length: count }, (_, i) => {
     const key = `${props.cluster.id}|cp|${i}`
     const zone = single ? (cp.zone || subnet?.zone || REGION.zones[0].id) : REGION.zones[i % REGION.zones.length].id
+    const ready = props.cluster.status !== 'error'
     return {
       id: key, index: i + 1, name: `${props.cluster.name}-master-${i + 1}`,
       zone: REGION.zones.find(z => z.id === zone)?.name || zone,
-      ready: props.cluster.status === 'running' || props.cluster.status === 'upgrading',
-      status: props.cluster.status === 'error' ? 'Error' : props.cluster.status === 'provisioning' ? 'Creating' : 'Running',
+      ready,
+      status: ready ? 'Ready' : 'NotReady',
       cpu: Number((2 + (seedHash(`${key}|cpu`) % 800) / 100).toFixed(2)),
       ram: Number((24 + (seedHash(`${key}|mem`) % 2400) / 100).toFixed(2)),
     }
@@ -144,10 +147,15 @@ watch(() => props.cluster.id, () => { monitorOpen.value = false; selectedNode.va
     <template #header><div><h2>Control Plane Nodes</h2><p>Dedicated nodes that manage the cluster.</p></div></template>
     <div class="overview-control-plane__scroll" tabindex="0" role="region" aria-label="Control plane nodes table">
       <ArTable :columns="columns" :items="nodes" class="overview-control-plane__table">
+        <template #header-status>
+          <ArTableCell header>
+            <span class="overview-control-plane__status-head">Status <ArTooltip :content="STATUS_TIP"><ArIcon name="info" size="sm" class="overview-control-plane__help" tabindex="0" :aria-label="`Status: ${STATUS_TIP}`" /></ArTooltip></span>
+          </ArTableCell>
+        </template>
         <template #row="node"><ArTableRow>
           <ArTableCell><span class="overview-control-plane__index">{{ node.index }}</span></ArTableCell>
           <ArTableCell>{{ node.name }}</ArTableCell>
-          <ArTableCell><ArBadge :variant="node.ready ? 'success' : node.status === 'Error' ? 'danger' : 'info'" :text="node.status" :prepend-icon="node.ready ? 'check-circle' : ''" /></ArTableCell>
+          <ArTableCell><ArBadge :variant="node.ready ? 'success' : 'danger'" :text="node.status" :prepend-icon="node.ready ? 'check-circle' : 'cross-circle'" /></ArTableCell>
           <ArTableCell>{{ node.zone }}</ArTableCell>
           <ArTableCell><div class="overview-control-plane__usage"><ArProgressBar :value="node.cpu" /><span>{{ node.cpu }}%</span></div></ArTableCell>
           <ArTableCell><div class="overview-control-plane__usage"><ArProgressBar :value="node.ram" /><span>{{ node.ram }}%</span></div></ArTableCell>
@@ -159,7 +167,7 @@ watch(() => props.cluster.id, () => { monitorOpen.value = false; selectedNode.va
 
   <ArSidePanel v-model="monitorOpen" :title="selectedNode?.name || 'Node monitoring'" caption="Control plane · Prototype metrics · Last 6 hours" size="md">
     <template v-if="selectedNode">
-      <div class="overview-control-plane__node-meta"><ArBadge :variant="selectedNode.ready ? 'success' : selectedNode.status === 'Error' ? 'danger' : 'info'" :text="selectedNode.status" /><span>AZ: {{ selectedNode.zone }}</span></div>
+      <div class="overview-control-plane__node-meta"><ArBadge :variant="selectedNode.ready ? 'success' : 'danger'" :text="selectedNode.status" :prepend-icon="selectedNode.ready ? 'check-circle' : 'cross-circle'" /><span>AZ: {{ selectedNode.zone }}</span></div>
       <div v-for="chart in nodeCharts" :key="chart.title" class="overview-control-plane__node-chart"><h3>{{ chart.title }}</h3><ArLineAreaChart :data="chart.data" x-axis-type="time" :height="220" :format-x-axis="formatTime" :format-y-axis="formatPercent" /></div>
     </template>
     <template #footer><ArButton variant="tertiary" @click="monitorOpen = false">Close</ArButton></template>
@@ -200,6 +208,8 @@ p { margin: 8px 0 0; color: var(--fg-neutral-t1-3-default); font-size: 14px; lin
 .overview-control-plane__table :deep(th:nth-child(7)) { width: 112px; }
 .overview-control-plane__table :deep(td:nth-child(2)) { white-space: normal; overflow-wrap: anywhere; }
 .overview-control-plane__index { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; border-radius: 6px; background: var(--bg-neutral-t1-3-default); }
+.overview-control-plane__status-head { display: inline-flex; align-items: center; gap: 4px; }
+.overview-control-plane__help { color: var(--fg-neutral-t1-3-default); cursor: help; }
 .overview-control-plane__usage { display: flex; align-items: center; gap: 8px; }
 .overview-control-plane__usage :deep(.v11-1-0-ArProgressBar) { min-width: 48px; flex: 1; padding: 0; }
 .overview-control-plane__usage > span { min-width: 55px; font-size: 12px; }
